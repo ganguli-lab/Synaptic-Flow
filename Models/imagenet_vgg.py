@@ -1,3 +1,5 @@
+# Based on code taken from https://pytorch.org/docs/stable/torchvision/models.html
+
 import torch
 import torch.nn as nn
 from .utils import load_state_dict_from_url

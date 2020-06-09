@@ -4,7 +4,6 @@ import os
 from Experiments import example
 from Experiments import singleshot
 from Experiments import lottery
-from Experiments import continual
 
 if __name__ == '__main__':
 
@@ -21,8 +20,7 @@ if __name__ == '__main__':
                         'wide-resnet18','wide-resnet20','wide-resnet32','wide-resnet34','wide-resnet44','wide-resnet50',
                         'wide-resnet56','wide-resnet101','wide-resnet110','wide-resnet110','wide-resnet152','wide-resnet1202'],
                         help='model architecture (default: fc)')
-    training_args.add_argument('--model-class', type=str, default='default', choices=['default','shrinkbench','lottery', 
-                                                                                      'tinyimagenet','imagenet'],
+    training_args.add_argument('--model-class', type=str, default='default', choices=['default','lottery','tinyimagenet','imagenet'],
                         help='model class (default: default)')
     training_args.add_argument('--dense-classifier', type=bool, default=False,
                         help='ensure last layer of model is dense (default: False)')
@@ -79,8 +77,8 @@ if __name__ == '__main__':
                         help='experiment name (default: example)')
     parser.add_argument('--expid', type=str, default='',
                         help='name used to save results (default: "")')
-    parser.add_argument('--result-dir', type=str, default='./Results/data',
-                        help='path to directory to save results (default: "./Results/data")')
+    parser.add_argument('--result-dir', type=str, default='Results/data',
+                        help='path to directory to save results (default: "Results/data")')
     parser.add_argument('--gpu', type=int, default='0',
                         help='number of GPU device to use (default: 0)')
     parser.add_argument('--workers', type=int, default='4',

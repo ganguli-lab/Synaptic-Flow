@@ -1,3 +1,5 @@
+# Based on code taken from https://github.com/weiaicunzai/pytorch-cifar100
+
 """resnet in pytorch
 
 
