@@ -3,8 +3,6 @@ import numpy as np
 from torchvision import datasets, transforms
 import torch.optim as optim
 from Models import mlp
-from Models import shrinkbench_vgg
-from Models import shrinkbench_resnet
 from Models import lottery_vgg
 from Models import lottery_resnet
 from Models import tinyimagenet_vgg
@@ -98,15 +96,6 @@ def model(model_architecture, model_class):
         'fc' : mlp.fc,
         'conv' : mlp.conv,
     }
-    shrinkbench_models = {
-        'vgg16-bn' : shrinkbench_vgg.vgg16_bn,
-        'resnet20': shrinkbench_resnet.resnet20,
-        'resnet32': shrinkbench_resnet.resnet32,
-        'resnet44': shrinkbench_resnet.resnet44,
-        'resnet56': shrinkbench_resnet.resnet56,
-        'resnet110': shrinkbench_resnet.resnet110,
-        'resnet1202': shrinkbench_resnet.resnet1202
-    }
     lottery_models = {
         'vgg11' : lottery_vgg.vgg11,
         'vgg11-bn' : lottery_vgg.vgg11_bn,
@@ -168,7 +157,6 @@ def model(model_architecture, model_class):
     }
     models = {
         'default' : default_models,
-        'shrinkbench' : shrinkbench_models,
         'lottery' : lottery_models,
         'tinyimagenet' : tinyimagenet_models,
         'imagenet' : imagenet_models
