@@ -50,4 +50,4 @@ All data used to generate the figures in our paper can be found in the `Results/
 
 ## Citation
 If you use this code for your research, please cite our paper,
-["Pruning neural networks without any data by iteratively conserving synaptic flow"]().
+["Pruning neural networks without any data by iteratively conserving synaptic flow"](https://arxiv.org/abs/2006.05467).
