@@ -61,10 +61,10 @@ def run(args):
                 
                 if p == 'sf':
                     prune_loop(model, loss, pruner, prune_loader, device, sparsity,
-                               args.normalize_score, args.mask_scope, args.prune_epochs, args.reinitialize)
+                               args.linear_compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
                 else:
                     prune_loop(model, loss, pruner, prune_loader, device, sparsity,
-                               args.normalize_score, args.mask_scope, 1, args.reinitialize)     
+                               args.linear_compression_schedule, args.mask_scope, 1, args.reinitialize)     
                     
                 prune_result = metrics.summary(model, 
                                                pruner.scores,

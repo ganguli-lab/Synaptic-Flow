@@ -41,7 +41,7 @@ def run(args):
     print('Pruning with {} for {} epochs.'.format(args.pruner, args.prune_epochs))
     pruner = load.pruner(args.pruner)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
     prune_loop(model, loss, pruner, prune_loader, device, args.sparsity, 
-               args.normalize_score, args.mask_scope, args.prune_epochs, args.reinitialize)
+               args.linear_compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
 
     
     ## Post-Train ##

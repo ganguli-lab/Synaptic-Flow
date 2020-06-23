@@ -10,6 +10,7 @@ from Models import tinyimagenet_resnet
 from Models import imagenet_vgg
 from Models import imagenet_resnet
 from Pruners import pruners
+from Utils import custom_datasets
 
 def device(gpu):
     use_cuda = torch.cuda.is_available()
@@ -54,12 +55,10 @@ def dataloader(dataset, batch_size, train, workers, length=None):
     if dataset == 'tiny-imagenet':
         mean, std = (0.480, 0.448, 0.397), (0.276, 0.269, 0.282)
         transform = get_transform(size=64, padding=4, mean=mean, std=std, preprocess=train)
-        folder = 'Data/tiny-imagenet-200/{}'.format('train' if train else 'val')
-        dataset = datasets.ImageFolder(folder, transform=transform)
+        dataset = custom_datasets.TINYIMAGENET('Data', train=train, download=True, transform=transform)
     if dataset == 'imagenet':
         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
         if train:
-            folder = 'Data/imagenet_raw/train'
             transform = transforms.Compose([
                 transforms.RandomResizedCrop(224, scale=(0.2,1.)),
                 transforms.RandomGrayscale(p=0.2),
@@ -68,12 +67,12 @@ def dataloader(dataset, batch_size, train, workers, length=None):
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std)])
         else:
-            folder = 'Data/imagenet_raw/val'
             transform = transforms.Compose([
                 transforms.Resize(256),
                 transforms.CenterCrop(224),
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std)])
+        folder = 'Data/imagenet_raw/{}'.format('train' if train else 'val')
         dataset = datasets.ImageFolder(folder, transform=transform)
     
     # Dataloader

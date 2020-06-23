@@ -52,8 +52,8 @@ if __name__ == '__main__':
                         help='fraction of non-zero parameters after pruning (default: 1.0)')
     pruning_args.add_argument('--prune-epochs', type=int, default=1,
                         help='number of iterations for scoring (default: 1)')
-    pruning_args.add_argument('--normalize-score', type=bool, default=False,
-                        help='normalize score for mask (default: False)')
+    pruning_args.add_argument('--linear-compression-schedule', type=bool, default=False,
+                        help='whether to use a linear or exponential compression schedule (default: False)')
     pruning_args.add_argument('--mask-scope', type=str, default='global', choices=['global','local','weight'],
                         help='masking scope (global or layer) (default: global)')
     pruning_args.add_argument('--prune-dataset-ratio', type=int, default=10,

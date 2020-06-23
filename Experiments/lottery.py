@@ -64,7 +64,7 @@ def run(args):
                     pruner = load.pruner('mag')(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
                     sparsity = (10**(-float(comp_exp)))**((l + 1) / prune_iters)
                     prune_loop(model, loss, pruner, prune_loader, device, sparsity,
-                               args.normalize_score, args.mask_scope, 1, args.reinitialize)
+                               args.linear_compression_schedule, args.mask_scope, 1, args.reinitialize)
 
                     # Reset Model's Weights
                     original_dict = torch.load("{}/model.pt".format(args.result_dir), map_location=device)
