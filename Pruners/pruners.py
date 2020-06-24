@@ -55,6 +55,15 @@ class Pruner:
         for mask, _ in self.masked_parameters:
             mask.fill_(alpha)
 
+    def stats(self):
+        r"""Returns remaining and total number of prunable parameters.
+        """
+        remaining_params, total_params = 0, 0 
+        for mask, _ in self.masked_parameters:
+             remaining_params += mask.detach().cpu().numpy().sum()
+             total_params += mask.numel()
+        return remaining_params, total_params
+
 
 class Rand(Pruner):
     def __init__(self, masked_parameters):
