@@ -1,5 +1,6 @@
 from tqdm import tqdm
 import torch
+import numpy as np
 
 def prune_loop(model, loss, pruner, dataloader, device,
                sparsity, linear_schedule, scope, epochs, reinitialize=False):
