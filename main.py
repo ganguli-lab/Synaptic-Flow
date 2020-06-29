@@ -3,7 +3,7 @@ import json
 import os
 from Experiments import example
 from Experiments import singleshot
-from Experiments import lottery
+from Experiments import multishot
 
 if __name__ == '__main__':
 
@@ -46,15 +46,16 @@ if __name__ == '__main__':
                         help='weight decay (default: 0.0)')
     # Pruning Hyperparameters
     pruning_args = parser.add_argument_group('pruning')
-    pruning_args.add_argument('--pruner', type=str, default='rand', choices=['rand','mag','snip','grasp','synflow'],
+    pruning_args.add_argument('--pruner', type=str, default='rand', 
+                        choices=['rand','mag','snip','grasp','synflow'],
                         help='prune strategy (default: rand)')
-    pruning_args.add_argument('--sparsity', type=float, default=1.0,
-                        help='fraction of non-zero parameters after pruning (default: 1.0)')
+    pruning_args.add_argument('--compression', type=float, default=1.0,
+                        help='quotient of prunable non-zero prunable parameters before and after pruning (default: 1.0)')
     pruning_args.add_argument('--prune-epochs', type=int, default=1,
                         help='number of iterations for scoring (default: 1)')
-    pruning_args.add_argument('--linear-compression-schedule', type=bool, default=False,
-                        help='whether to use a linear or exponential compression schedule (default: False)')
-    pruning_args.add_argument('--mask-scope', type=str, default='global', choices=['global','local','weight'],
+    pruning_args.add_argument('--compression-schedule', type=str, default='exponential', choices=['linear','exponential'],
+                        help='whether to use a linear or exponential compression schedule (default: exponential)')
+    pruning_args.add_argument('--mask-scope', type=str, default='global', choices=['global','local'],
                         help='masking scope (global or layer) (default: global)')
     pruning_args.add_argument('--prune-dataset-ratio', type=int, default=10,
                         help='ratio of prune dataset size and number of classes (default: 10)')
@@ -66,14 +67,17 @@ if __name__ == '__main__':
                         help='whether to prune batchnorm layers (default: False)')
     pruning_args.add_argument('--prune-residual', type=bool, default=False,
                         help='whether to prune residual connections (default: False)')
-    pruning_args.add_argument('--pruner-list', type=str, nargs='*', default=[],
-                        help='list of pruning strategies for singleshot (default: [])')
-    pruning_args.add_argument('--compression-list', type=float, nargs='*', default=[],
-                        help='list of compression ratio exponents for singleshot (default: [])')
     pruning_args.add_argument('--reinitialize', type=bool, default=False,
                         help='whether to reinitialize weight parameters after pruning (default: False)')
+    pruning_args.add_argument('--pruner-list', type=str, nargs='*', default=[],
+                        help='list of pruning strategies for singleshot/multishot (default: [])')
+    pruning_args.add_argument('--compression-list', type=float, nargs='*', default=[],
+                        help='list of compression ratio exponents for singleshot/multishot (default: [])')
+    pruning_args.add_argument('--level-list', type=int, nargs='*', default=[],
+                        help='list of number of prune-train cycles (levels) for multishot (default: [])')
     ## Experiment Hyperparameters ##
-    parser.add_argument('--experiment', type=str, default='example',
+    parser.add_argument('--experiment', type=str, default='example', 
+                        choices=['example','singleshot','multishot','conservation'],
                         help='experiment name (default: example)')
     parser.add_argument('--expid', type=str, default='',
                         help='name used to save results (default: "")')
@@ -119,5 +123,11 @@ if __name__ == '__main__':
         example.run(args)
     if args.experiment == 'singleshot':
         singleshot.run(args)
-    if args.experiment == 'lottery':
-        lottery.run(args)
+    if args.experiment == 'multishot':
+        multishot.run(args)
+    # if args.experiment == 'conservation':
+    #     unit_conservation.run(args)
+    #     layer_conservation.run(args)
+    #     imp_conservation.run(args)
+    #     synpatic_flow_ratio.run(args)
+

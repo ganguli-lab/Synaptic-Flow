@@ -40,8 +40,9 @@ def run(args):
     ## Prune ##
     print('Pruning with {} for {} epochs.'.format(args.pruner, args.prune_epochs))
     pruner = load.pruner(args.pruner)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
-    prune_loop(model, loss, pruner, prune_loader, device, args.sparsity, 
-               args.linear_compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
+    sparsity = 10**(-float(args.compression))
+    prune_loop(model, loss, pruner, prune_loader, device, sparsity, 
+               args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
 
     
     ## Post-Train ##
@@ -62,8 +63,8 @@ def run(args):
     possible_flops = prune_result['flops'].sum()
     print("Train results:\n", train_result)
     print("Prune results:\n", prune_result)
-    print("Parameter Sparsity: {}/{} ({:.4f})".format(total_params, possible_params, total_params / possible_params))
-    print("FLOP Sparsity: {}/{} ({:.4f})".format(total_flops, possible_flops, total_flops / possible_flops))
+    print("Parameter Compression: {}/{} ({:.4f})".format(possible_params, total_params, possible_params / total_params))
+    print("FLOP Compression: {}/{} ({:.4f})".format(possible_flops, total_flops, possible_flops / total_flops))
 
     ## Save Results and Model ##
     if args.save:

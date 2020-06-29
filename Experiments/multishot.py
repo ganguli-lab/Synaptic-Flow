@@ -35,44 +35,55 @@ def run(args):
     optimizer = opt_class(generator.parameters(model), lr=args.lr, weight_decay=args.weight_decay, **opt_kwargs)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.lr_drops, gamma=args.lr_drop_rate)
 
-    ## Pre-Train ##
-    print('Pre-Train for {} epochs.'.format(args.pre_epochs))
-    pre_result = train_eval_loop(model, loss, optimizer, scheduler, train_loader, 
-                                 test_loader, device, args.pre_epochs, args.verbose)
-
-    pre_result.to_pickle("{}/pre-train.pkl".format(args.result_dir))
+    ## Save Original ##
     torch.save(model.state_dict(),"{}/model.pt".format(args.result_dir))
     torch.save(optimizer.state_dict(),"{}/optimizer.pt".format(args.result_dir))
     torch.save(scheduler.state_dict(),"{}/scheduler.pt".format(args.result_dir))
 
-    ## Prune and Fine-Tune##
+    ## Train-Prune Loop ##
     for i, compression in enumerate(args.compression_list):
-        for j, p in enumerate(args.pruner_list):
-            print('{} compression ratio, {} pruners'.format(compression, p))
+        for j, level in enumerate(args.level_list):
+            print('{} compression ratio, {} train-prune levels'.format(compression, level))
             
+            # Reset Model, Optimizer, and Scheduler
             model.load_state_dict(torch.load("{}/model.pt".format(args.result_dir), map_location=device))
             optimizer.load_state_dict(torch.load("{}/optimizer.pt".format(args.result_dir), map_location=device))
             scheduler.load_state_dict(torch.load("{}/scheduler.pt".format(args.result_dir), map_location=device))
-
-            pruner = load.pruner(p)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
-            sparsity = 10**(-float(compression))
             
-            if p == 'sf':
+            for l in range(level):
+
+                # Pre Train Model
+                train_eval_loop(model, loss, optimizer, scheduler, train_loader, 
+                                test_loader, device, args.pre_epochs, args.verbose)
+
+                # Prune Model
+                pruner = load.pruner(args.pruner)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
+                sparsity = (10**(-float(compression)))**((l + 1) / level)
                 prune_loop(model, loss, pruner, prune_loader, device, sparsity,
                            args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
-            else:
-                prune_loop(model, loss, pruner, prune_loader, device, sparsity,
-                           args.compression_schedule, args.mask_scope, 1, args.reinitialize)     
+
+                # Reset Model's Weights
+                original_dict = torch.load("{}/model.pt".format(args.result_dir), map_location=device)
+                original_weights = dict(filter(lambda v: (v[1].requires_grad == True), model.state_dict().items()))
+                model_dict = model.state_dict()
+                model_dict.update(original_weights)
+                model.load_state_dict(model_dict)
                 
+                # Reset Optimizer and Scheduler
+                optimizer.load_state_dict(torch.load("{}/optimizer.pt".format(args.result_dir), map_location=device))
+                scheduler.load_state_dict(torch.load("{}/scheduler.pt".format(args.result_dir), map_location=device))
+
+            # Prune Result
             prune_result = metrics.summary(model, 
                                            pruner.scores,
                                            metrics.flop(model, input_shape, device),
                                            lambda p: generator.prunable(p, args.prune_batchnorm, args.prune_residual))
-
+            # Train Model
             post_result = train_eval_loop(model, loss, optimizer, scheduler, train_loader, 
                                           test_loader, device, args.post_epochs, args.verbose)
             
+            # Save Data
+            prune_result.to_pickle("{}/compression-{}-{}.pkl".format(args.result_dir, str(compression), str(level)))
+            post_result.to_pickle("{}/performance-{}-{}.pkl".format(args.result_dir, str(compression),  str(level)))
 
-            post_result.to_pickle("{}/post-train-{}-{}-{}.pkl".format(args.result_dir, p, str(compression), args.prune_epochs))
-            prune_result.to_pickle("{}/compression-{}-{}-{}.pkl".format(args.result_dir, p, str(compression), args.prune_epochs))
 
