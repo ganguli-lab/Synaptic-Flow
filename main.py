@@ -70,7 +70,9 @@ if __name__ == '__main__':
     pruning_args.add_argument('--reinitialize', type=bool, default=False,
                         help='whether to reinitialize weight parameters after pruning (default: False)')
     pruning_args.add_argument('--pruner-list', type=str, nargs='*', default=[],
-                        help='list of pruning strategies for singleshot/multishot (default: [])')
+                        help='list of pruning strategies for singleshot (default: [])')
+    pruning_args.add_argument('--prune-epoch-list', type=int, nargs='*', default=[],
+                        help='list of prune epochs for singleshot (default: [])')
     pruning_args.add_argument('--compression-list', type=float, nargs='*', default=[],
                         help='list of compression ratio exponents for singleshot/multishot (default: [])')
     pruning_args.add_argument('--level-list', type=int, nargs='*', default=[],

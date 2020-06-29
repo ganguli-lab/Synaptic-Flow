@@ -63,8 +63,8 @@ def run(args):
     possible_flops = prune_result['flops'].sum()
     print("Train results:\n", train_result)
     print("Prune results:\n", prune_result)
-    print("Parameter Compression: {}/{} ({:.4f})".format(possible_params, total_params, possible_params / total_params))
-    print("FLOP Compression: {}/{} ({:.4f})".format(possible_flops, total_flops, possible_flops / total_flops))
+    print("Parameter Sparsity: {}/{} ({:.4f})".format(total_params, possible_params, total_params / possible_params))
+    print("FLOP Sparsity: {}/{} ({:.4f})".format(total_flops, possible_flops, total_flops / possible_flops))
 
     ## Save Results and Model ##
     if args.save:

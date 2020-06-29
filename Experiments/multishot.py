@@ -41,8 +41,8 @@ def run(args):
     torch.save(scheduler.state_dict(),"{}/scheduler.pt".format(args.result_dir))
 
     ## Train-Prune Loop ##
-    for i, compression in enumerate(args.compression_list):
-        for j, level in enumerate(args.level_list):
+    for compression in args.compression_list:
+        for level in args.level_list:
             print('{} compression ratio, {} train-prune levels'.format(compression, level))
             
             # Reset Model, Optimizer, and Scheduler
