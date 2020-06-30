@@ -1,0 +1,10 @@
+git clone https://github.com/ganguli-lab/Synaptic-Flow ./Public-Synaptic-Flow
+
+virtualenv -p python3 ./SynFlow_env 
+
+source SynFlow_env/bin/activate
+
+cd Public-Synaptic-Flow
+
+pip install -r requirements.txt
+
