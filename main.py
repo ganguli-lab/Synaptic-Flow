@@ -4,6 +4,10 @@ import os
 from Experiments import example
 from Experiments import singleshot
 from Experiments import multishot
+from Experiments.theory import unit_conservation
+from Experiments.theory import layer_conservation
+from Experiments.theory import imp_conservation
+from Experiments.theory import schedule_conservation
 
 if __name__ == '__main__':
 
@@ -79,7 +83,8 @@ if __name__ == '__main__':
                         help='list of number of prune-train cycles (levels) for multishot (default: [])')
     ## Experiment Hyperparameters ##
     parser.add_argument('--experiment', type=str, default='example', 
-                        choices=['example','singleshot','multishot','conservation'],
+                        choices=['example','singleshot','multishot','unit-conservation',
+                        'layer-conservation','imp-conservation','schedule-conservation'],
                         help='experiment name (default: example)')
     parser.add_argument('--expid', type=str, default='',
                         help='name used to save results (default: "")')
@@ -127,9 +132,12 @@ if __name__ == '__main__':
         singleshot.run(args)
     if args.experiment == 'multishot':
         multishot.run(args)
-    # if args.experiment == 'conservation':
-    #     unit_conservation.run(args)
-    #     layer_conservation.run(args)
-    #     imp_conservation.run(args)
-    #     synpatic_flow_ratio.run(args)
+    if args.experiment == 'unit-conservation':
+    	unit_conservation.run(args)
+    if args.experiment == 'layer-conservation':
+        layer_conservation.run(args)
+    if args.experiment == 'imp-conservation':
+        imp_conservation.run(args)
+    if args.experiment == 'schedule-conservation':
+        schedule_conservation.run(args)
 
