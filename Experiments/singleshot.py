@@ -73,6 +73,6 @@ def run(args):
                                           test_loader, device, args.post_epochs, args.verbose)
             
             # Save Data
-            post_result.to_pickle("{}/post-train-{}-{}-{}.pkl".format(args.result_dir, p, str(compression), args.prune_epochs))
-            prune_result.to_pickle("{}/compression-{}-{}-{}.pkl".format(args.result_dir, p, str(compression), args.prune_epochs))
+            post_result.to_pickle("{}/post-train-{}-{}-{}.pkl".format(args.result_dir, p, str(compression), p_epochs))
+            prune_result.to_pickle("{}/compression-{}-{}-{}.pkl".format(args.result_dir, p, str(compression), p_epochs))
 

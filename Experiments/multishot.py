@@ -83,7 +83,7 @@ def run(args):
                                           test_loader, device, args.post_epochs, args.verbose)
             
             # Save Data
-            prune_result.to_pickle("{}/compression-{}-{}.pkl".format(args.result_dir, str(compression), str(level)))
-            post_result.to_pickle("{}/performance-{}-{}.pkl".format(args.result_dir, str(compression),  str(level)))
+            post_result.to_pickle("{}/post-train-{}-{}-{}.pkl".format(args.result_dir, args.pruner, str(compression),  str(level)))
+            prune_result.to_pickle("{}/compression-{}-{}-{}.pkl".format(args.result_dir, args.pruner, str(compression), str(level)))
 
 
