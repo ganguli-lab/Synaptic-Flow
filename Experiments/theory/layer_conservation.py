@@ -68,7 +68,7 @@ def run(args):
     for i, p in enumerate(args.pruner_list):
         pruner = load.pruner(p)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
         sparsity = 10**(-float(args.compression))
-        prune_loop(model, loss, pruner, prune_loader, device, sparsity, 
+        prune_loop(model, loss, pruner, data_loader, device, sparsity, 
                    args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
         average_score = average_layer_score(model, pruner.scores)
         average_scores.append(average_score)
