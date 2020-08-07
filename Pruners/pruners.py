@@ -140,9 +140,9 @@ class GraSP(Pruner):
             gnorm = (stopped_grads * flatten_grads).sum()
             gnorm.backward()
         
-        # calculate score -Hg * theta
+        # calculate score Hg * theta (negate to remove top percent)
         for _, p in self.masked_parameters:
-            self.scores[id(p)] = torch.clone(-p.grad * p.data).detach()
+            self.scores[id(p)] = torch.clone(p.grad * p.data).detach()
             p.grad.data.zero_()
 
         # normalize score

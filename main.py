@@ -71,6 +71,8 @@ if __name__ == '__main__':
                         help='whether to prune batchnorm layers (default: False)')
     pruning_args.add_argument('--prune-residual', type=bool, default=False,
                         help='whether to prune residual connections (default: False)')
+    pruning_args.add_argument('--prune-train-mode', type=bool, default=False,
+                        help='whether to prune in train mode (default: False)')
     pruning_args.add_argument('--reinitialize', type=bool, default=False,
                         help='whether to reinitialize weight parameters after pruning (default: False)')
     pruning_args.add_argument('--pruner-list', type=str, nargs='*', default=[],

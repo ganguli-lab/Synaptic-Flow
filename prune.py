@@ -3,10 +3,14 @@ import torch
 import numpy as np
 
 def prune_loop(model, loss, pruner, dataloader, device, sparsity, 
-               schedule, scope, epochs, reinitialize=False):
+               schedule, scope, epochs, reinitialize=False, train_mode=False):
     r"""Applies score mask loop iteratively to a final sparsity level.
     """
-    model.eval()
+    # Set model to eval mode
+    if not train_mode:
+        model.eval()
+
+    # Prune model
     for epoch in tqdm(range(epochs)):
         pruner.apply_mask()
         pruner.score(model, loss, dataloader, device)

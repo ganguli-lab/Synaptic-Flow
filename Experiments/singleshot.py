@@ -60,7 +60,7 @@ def run(args):
             pruner = load.pruner(p)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
             sparsity = 10**(-float(compression))
             prune_loop(model, loss, pruner, prune_loader, device, sparsity,
-                       args.compression_schedule, args.mask_scope, p_epochs, args.reinitialize)   
+                       args.compression_schedule, args.mask_scope, p_epochs, args.reinitialize, args.prune_train_mode)   
             
             # Prune Result
             prune_result = metrics.summary(model, 
