@@ -74,6 +74,6 @@ def run(args):
         prune_result.to_pickle("{}/compression.pkl".format(args.result_dir))
         torch.save(model.state_dict(),"{}/model.pt".format(args.result_dir))
         torch.save(optimizer.state_dict(),"{}/optimizer.pt".format(args.result_dir))
-        torch.save(pruner.state_dict(),"{}/pruner.pt".format(args.result_dir))
+        torch.save(scheduler.state_dict(),"{}/scheduler.pt".format(args.result_dir))
 
 
