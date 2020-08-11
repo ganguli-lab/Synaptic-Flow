@@ -96,6 +96,10 @@ class SNIP(Pruner):
 
     def score(self, model, loss, dataloader, device):
 
+        # allow masks to have gradient
+        for m, _ in self.masked_parameters:
+            m.requires_grad = True
+
         # compute gradient
         for batch_idx, (data, target) in enumerate(dataloader):
             data, target = data.to(device), target.to(device)
@@ -103,9 +107,11 @@ class SNIP(Pruner):
             loss(output, target).backward()
 
         # calculate score |g * theta|
-        for _, p in self.masked_parameters:
-            self.scores[id(p)] = torch.clone(p.grad * p.data).detach().abs_()
+        for m, p in self.masked_parameters:
+            self.scores[id(p)] = torch.clone(m.grad).detach().abs_()
             p.grad.data.zero_()
+            m.grad.data.zero_()
+            m.requires_grad = False
 
         # normalize score
         all_scores = torch.cat([torch.flatten(v) for v in self.scores.values()])

@@ -12,13 +12,14 @@ def prune_loop(model, loss, pruner, dataloader, device, sparsity,
 
     # Prune model
     for epoch in tqdm(range(epochs)):
-        pruner.apply_mask()
         pruner.score(model, loss, dataloader, device)
         if schedule == 'exponential':
             sparse = sparsity**((epoch + 1) / epochs)
         elif schedule == 'linear':
             sparse = 1.0 - (1.0 - sparsity)*((epoch + 1) / epochs)
         pruner.mask(sparse, scope)
+    
+    # Reainitialize weights
     if reinitialize:
         model._initialize_weights()
 
