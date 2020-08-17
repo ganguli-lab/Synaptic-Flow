@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-from Experiments import example
 from Experiments import singleshot
 from Experiments import multishot
 from Experiments.theory import unit_conservation
@@ -84,8 +83,8 @@ if __name__ == '__main__':
     pruning_args.add_argument('--level-list', type=int, nargs='*', default=[],
                         help='list of number of prune-train cycles (levels) for multishot (default: [])')
     ## Experiment Hyperparameters ##
-    parser.add_argument('--experiment', type=str, default='example', 
-                        choices=['example','singleshot','multishot','unit-conservation',
+    parser.add_argument('--experiment', type=str, default='singleshot', 
+                        choices=['singleshot','multishot','unit-conservation',
                         'layer-conservation','imp-conservation','schedule-conservation'],
                         help='experiment name (default: example)')
     parser.add_argument('--expid', type=str, default='',
@@ -128,8 +127,6 @@ if __name__ == '__main__':
             json.dump(args.__dict__, f, sort_keys=True, indent=4)
 
     ## Run Experiment ##
-    if args.experiment == 'example':
-        example.run(args)
     if args.experiment == 'singleshot':
         singleshot.run(args)
     if args.experiment == 'multishot':
