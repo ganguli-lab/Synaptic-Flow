@@ -35,7 +35,6 @@ All pruning algorithms are implemented in the `Pruners` folder.
 ### Experiments
 
 Below is a list and description of the experiment files found in the `Experiment` folder:
- - `example.py`: used to test code.
  - `singleshot.py`: used to make figure 1, 2, and 6.
  - `multishot.py`: used to make figure 5a.
  - `unit-conservation.py`: used to make figure 3.
