@@ -65,12 +65,11 @@ def run(args):
     names, inv_size = layer_names(model)
     average_scores = []
     unit_scores = []
-    for i, p in enumerate(args.pruner_list):
-        pruner = load.pruner(p)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
-        sparsity = 10**(-float(args.compression))
-        prune_loop(model, loss, pruner, data_loader, device, sparsity, 
-                   args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
-        average_score = average_layer_score(model, pruner.scores)
-        average_scores.append(average_score)
-        np.save('{}/{}'.format(args.result_dir, p), np.array(average_score))
+    pruner = load.pruner(args.pruner)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
+    sparsity = 10**(-float(args.compression))
+    prune_loop(model, loss, pruner, data_loader, device, sparsity, 
+               args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize, args.prune_train_mode)
+    average_score = average_layer_score(model, pruner.scores)
+    average_scores.append(average_score)
+    np.save('{}/{}'.format(args.result_dir, args.pruner), np.array(average_score))
     np.save('{}/{}'.format(args.result_dir,'inv-size'), inv_size)

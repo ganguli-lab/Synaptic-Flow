@@ -30,20 +30,19 @@ def run(args):
 
 
     ## Compute per Neuron Score ##
-    def unit_score_sum(model, scores):
+    def unit_score_sum(model, scores, compute_linear=False):
         in_scores = []
         out_scores = []
         for name, module in model.named_modules():
-            # # Only plot hidden units between convolutions
-            # if isinstance(module, layers.Linear):
-            #     W = module.weight
-            #     b = module.bias
+            if (isinstance(module, layers.Linear) and compute_linear):
+                W = module.weight
+                b = module.bias
 
-            #     W_score = scores[id(W)].detach().cpu().numpy()
-            #     b_score = scores[id(b)].detach().cpu().numpy()
+                W_score = scores[id(W)].detach().cpu().numpy()
+                b_score = scores[id(b)].detach().cpu().numpy()
 
-            #     in_scores.append(W_score.sum(axis=1) + b_score)
-            #     out_scores.append(W_score.sum(axis=0))
+                in_scores.append(W_score.sum(axis=1) + b_score)
+                out_scores.append(W_score.sum(axis=0))
             if isinstance(module, layers.Conv2d):
                 W = module.weight
                 W_score = scores[id(W)].detach().cpu().numpy()
@@ -64,11 +63,10 @@ def run(args):
 
     ## Loop through Pruners and Save Data ##
     unit_scores = []
-    for i, p in enumerate(args.pruner_list):
-        pruner = load.pruner(p)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
-        sparsity = 10**(-float(args.compression))
-        prune_loop(model, loss, pruner, data_loader, device, sparsity, 
-                   args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize)
-        unit_score = unit_score_sum(model, pruner.scores)
-        unit_scores.append(unit_score)
-        np.save('{}/{}'.format(args.result_dir, p), unit_score)
+    pruner = load.pruner(args.pruner)(generator.masked_parameters(model, args.prune_bias, args.prune_batchnorm, args.prune_residual))
+    sparsity = 10**(-float(args.compression))
+    prune_loop(model, loss, pruner, data_loader, device, sparsity, 
+               args.compression_schedule, args.mask_scope, args.prune_epochs, args.reinitialize, args.prune_train_mode)
+    unit_score = unit_score_sum(model, pruner.scores)
+    unit_scores.append(unit_score)
+    np.save('{}/{}'.format(args.result_dir, args.pruner), unit_score)
