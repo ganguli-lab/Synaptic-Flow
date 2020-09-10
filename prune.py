@@ -6,7 +6,8 @@ def prune_loop(model, loss, pruner, dataloader, device, sparsity,
                schedule, scope, epochs, reinitialize=False, train_mode=False):
     r"""Applies score mask loop iteratively to a final sparsity level.
     """
-    # Set model to eval mode
+    # Set model to train or eval mode
+    model.train()
     if not train_mode:
         model.eval()
 
