@@ -172,6 +172,7 @@ class SynFlow(Pruner):
       
         @torch.no_grad()
         def linearize(model):
+        	model.double()
             signs = {}
             for name, param in model.state_dict().items():
                 signs[name] = torch.sign(param)
@@ -180,6 +181,7 @@ class SynFlow(Pruner):
 
         @torch.no_grad()
         def nonlinearize(model, signs):
+        	model.float()
             for name, param in model.state_dict().items():
                 param.mul_(signs[name])
         
@@ -187,7 +189,7 @@ class SynFlow(Pruner):
 
         (data, _) = next(iter(dataloader))
         input_dim = list(data[0,:].shape)
-        input = torch.ones([1] + input_dim).to(device)
+        input = torch.ones([1] + input_dim, dtype=torch.float64).to(device)
         output = model(input)
         torch.sum(output).backward()
         
