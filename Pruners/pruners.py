@@ -12,10 +12,10 @@ class Pruner:
     def _global_mask(self, sparsity):
         r"""Updates masks of model with scores by sparsity level globally.
         """
-        # Set score for masked parameters to -inf 
-        for mask, param in self.masked_parameters:
-            score = self.scores[id(param)]
-            score[mask == 0.0] = -np.inf
+        # # Set score for masked parameters to -inf 
+        # for mask, param in self.masked_parameters:
+        #     score = self.scores[id(param)]
+        #     score[mask == 0.0] = -np.inf
 
         # Threshold scores
         global_scores = torch.cat([torch.flatten(v) for v in self.scores.values()])
@@ -172,7 +172,7 @@ class SynFlow(Pruner):
       
         @torch.no_grad()
         def linearize(model):
-        	model.double()
+            # model.double()
             signs = {}
             for name, param in model.state_dict().items():
                 signs[name] = torch.sign(param)
@@ -181,7 +181,7 @@ class SynFlow(Pruner):
 
         @torch.no_grad()
         def nonlinearize(model, signs):
-        	model.float()
+            # model.float()
             for name, param in model.state_dict().items():
                 param.mul_(signs[name])
         
@@ -189,7 +189,7 @@ class SynFlow(Pruner):
 
         (data, _) = next(iter(dataloader))
         input_dim = list(data[0,:].shape)
-        input = torch.ones([1] + input_dim, dtype=torch.float64).to(device)
+        input = torch.ones([1] + input_dim).to(device)#, dtype=torch.float64).to(device)
         output = model(input)
         torch.sum(output).backward()
         
