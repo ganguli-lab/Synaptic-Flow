@@ -61,6 +61,13 @@ class Pruner:
         for mask, _ in self.masked_parameters:
             mask.fill_(alpha)
 
+    # Based on https://github.com/facebookresearch/open_lth/blob/master/utils/tensor_utils.py#L43
+    def shuffle(self):
+        for mask, param in self.masked_parameters:
+            shape = mask.shape
+            perm = torch.randperm(mask.nelement())
+            mask = mask.reshape(-1)[perm].reshape(shape)
+
     def stats(self):
         r"""Returns remaining and total number of prunable parameters.
         """

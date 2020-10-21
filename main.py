@@ -74,6 +74,8 @@ if __name__ == '__main__':
                         help='whether to prune in train mode (default: False)')
     pruning_args.add_argument('--reinitialize', type=bool, default=False,
                         help='whether to reinitialize weight parameters after pruning (default: False)')
+    pruning_args.add_argument('--shuffle', type=bool, default=False,
+                        help='whether to shuffle masks after pruning (default: False)')
     pruning_args.add_argument('--pruner-list', type=str, nargs='*', default=[],
                         help='list of pruning strategies for singleshot (default: [])')
     pruning_args.add_argument('--prune-epoch-list', type=int, nargs='*', default=[],
