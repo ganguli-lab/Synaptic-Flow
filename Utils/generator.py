@@ -27,7 +27,7 @@ def parameters(model):
     parameter tensor.
     """
     for module in filter(lambda p: trainable(p), model.modules()):
-        for param in module.parameters(recurse=False):
+        for param in module.parameters():
             yield param
 
 def masked_parameters(model, bias=False, batchnorm=False, residual=False):
@@ -35,6 +35,6 @@ def masked_parameters(model, bias=False, batchnorm=False, residual=False):
     mask and parameter tensors.
     """
     for module in filter(lambda p: prunable(p, batchnorm, residual), model.modules()):
-        for mask, param in zip(masks(module), module.parameters(recurse=False)):
+        for mask, param in zip(masks(module), module.parameters()):
             if param is not module.bias or bias is True:
                 yield mask, param
