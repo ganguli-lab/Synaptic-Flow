@@ -68,6 +68,10 @@ class Pruner:
             perm = torch.randperm(mask.nelement())
             mask = mask.reshape(-1)[perm].reshape(shape)
 
+    def invert(self):
+        for v in self.scores.values():
+            v.div_(v**2)
+
     def stats(self):
         r"""Returns remaining and total number of prunable parameters.
         """
