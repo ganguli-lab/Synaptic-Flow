@@ -45,6 +45,9 @@ Below is a list and description of the experiment files found in the `Experiment
 
 All data used to generate the figures in our paper can be found in the `Results/data` folder.  Run the notebook `figures.ipynb` to generate the figures.
 
+#### Error
+Due to an error in multishop.py (which has since been fixed), IMP did not reset the parameters to their original values between iterations. All benchmarks in the paper are not affected as they are run in singleshot.py.
+
 ## Citation
 If you use this code for your research, please cite our paper,
 ["Pruning neural networks without any data by iteratively conserving synaptic flow"](https://arxiv.org/abs/2006.05467).
