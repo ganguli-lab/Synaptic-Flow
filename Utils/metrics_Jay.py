@@ -80,7 +80,6 @@ def flop(model, input_shape, device):
 
     return total
 
-
 # def conservation(model, scores, batchnorm, residual):
 #     r"""Summary of conservation results for a model.
 #     """
@@ -209,3 +208,174 @@ def neural_persistence(model):
     for name, module in model.named_modules():
         module.register_forward_hook(compute_NP(name))
     return total
+
+def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbose):
+    """
+    Purpose: 
+    - Compute the layer-wise critical compression ratio for a given model and dataset
+    - Track shapes on inputs and outputs
+    
+    Author: 
+    - Jakob Krzyston (jakobk@gatech.edu)
+    
+    Inputs:
+    - model_name   = Model name
+    - model        = Neural netowork model
+    - dataset_name = Dataset name
+    - input_shape  = Dimensionality of the input images
+    - gpu_idxs     = Locations of the GPUs
+    - verbose      = If True, will execute print statement
+    
+    Outputs:
+    - eta_c         = List of layer-wise critical compression ratios 
+    - in_out_shapes = List of layer-wise input and output sizes
+    
+    Notes:
+    - These are tailored to how the models and datasets in the SynFlow repo (https://github.com/ganguli-lab/Synaptic-Flow) were scripted
+    - These are limited to the model & dataset combinations seen in the paper
+    - The input dimensions for convolutional layers assume a padding of 1
+    
+    """
+    # Load Packages
+    import torch.nn as nn
+    from Utils import load
+    
+    # generate a sample data point
+    shape = tuple([1,input_shape[0],input_shape[1],input_shape[2]])
+    out = torch.rand((shape))     
+    
+    # Device
+    device = load.device(gpu_idxs)
+    
+    # get the names of all of the named_modules
+    names = []
+    for name, module in model.named_modules():
+        names.append(name)
+
+    # log the compression ratios on a per layer basis
+    eta_c = []
+    
+    #log the input and output shapes
+    in_out_shapes = []
+
+    outs = [] # keep track of output dimensions
+    if "cifar10" in dataset_name:
+        # keep track of location in names list
+        ind = 0
+        if 'vgg' in model_name:
+            """Compute eta_c for VGG style models wrt CIFAR 10"""
+            for name, module in model.named_modules():
+                mod = module.eval()
+                outs.append(out.shape)
+                if ind+1 < len(names):
+                    if '.conv' in names[ind+1]:
+                        out = mod(out.clone().detach().float().to(device))
+                if '.conv' in name:
+                    m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input, +2 is for padding
+                    n = out.shape[2]*out.shape[3]       # dimensions of output
+                    eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                    in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3]))) # +2 is for padding
+                if 'fc' in name:
+                    eta_c.append(((module.in_features*module.out_features))/(module.in_features+module.out_features-1))
+                    in_out_shapes.append((module.in_features,module.out_features))
+                ind+=1 
+
+        elif 'resnet' in model_name: 
+            '''Compute eta_c for ResNet style models wrt CIFAR 10'''
+            for name, module in model.named_modules():
+                import torch.nn.functional as F
+                mod = module.eval()
+                outs.append(out.shape)
+                if ind+1 < len(names):
+                    if 'conv' in name:
+#                         print(module)
+                        out = mod(out.clone().detach().float().to(device))
+                        if outs[-1][2] != out.shape[2]: # account for downsampling
+                            outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
+                        m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
+                        n = out.shape[2]*out.shape[3]       # dimensions of output
+                        # get the kernel size, not hard code
+                        eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                        in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                        ind += 1
+                    if 'fc' in name: # otherwise it's the dense layer
+                        out = F.avg_pool2d(out, out.size()[3])
+                        out = out.view(out.size(0), -1)
+                        out = mod(out.clone().detach().float().to(device))
+                        eta_c.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
+                        in_out_shapes.append((module.in_features,module.out_features))
+
+    elif "tiny" in dataset_name:
+
+        if 'vgg' in model_name:
+            """Compute eta_c for VGG11 model wrt tiny-imagenet"""
+            conv_locations  = ['.0','.3','.6','.8','.11','.13','.16','.18'] #denotes conv layer locations
+            dense_locations = ['0','3','6'] #denotes dense layer locations
+            pool_locations  = ['2','5','10','15','20'] #denotes pool layer locations
+            for name, module in model.named_modules():#works
+                outs.append(out.shape)
+                if 'classifier' in name:#dense layers
+                    if name[-1].isnumeric():
+                        if name[-1] == '0':
+                            out = out.view(out.size(0), -1)
+                        if any(x in name for x in dense_locations):
+                            mod = module.eval()
+                            out = mod(out.clone().detach().float().to(device))
+                            eta_c.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
+                            in_out_shapes.append((module.in_features,module.out_features))
+                elif 'features' in name:#conv layers
+                    if name[-1].isnumeric():
+                        #Conv operations
+                        if any(x in name for x in conv_locations):  
+                            mod = module.eval()
+                            out = mod(out.clone().detach().float().to(device))
+                            m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
+                            n = out.shape[2]*out.shape[3]       # dimensions of output
+                            eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                            in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                        #Maxpool operations
+                        elif any(x in name for x in pool_locations):
+                            mod = module.eval()
+                            out = mod(out.clone().detach().float().to(device))
+
+        elif 'resnet' in model_name:
+            """Compute eta_c for ResNet wrt tiny-imagenet"""
+            avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+            conv_locations = ['0','3']  #denotes conv layer locations w/in residual, NOT in shortcut
+            for name, module in model.named_modules():
+                mod = module.eval()
+                outs.append(out.shape)
+                if name == '': #ignore first layer name, is this necessary
+                    continue
+                elif name == 'conv1.0': 
+                    # account for the very first conv layer
+                    out = mod(out.clone().detach().float().to(device))
+                    if outs[-1][2] != out.shape[2]: # account for downsampling
+                        outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
+                    m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
+                    n = out.shape[2]*out.shape[3]       # dimensions of output
+                    eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                    in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                elif '_x' in name and 'residual' in name:
+                    if name[-1] in conv_locations:
+                        # all other conv layers that are not in shortut
+                        out = mod(out.clone().detach().float().to(device))
+                        if outs[-1][2] != out.shape[2]: # account for downsampling
+                            outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
+                        m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
+                        n = out.shape[2]*out.shape[3]       # dimensions of output
+                        eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                        in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                elif name == 'fc':
+                    # dense layers, will need to change with different sized resnets 
+                    # (number of dense layers will change)
+                    out = avg_pool(out)
+                    out = out.view(out.size(0), -1)
+                    out = mod(out.clone().detach().float().to(device))
+                    eta_c.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
+                    in_out_shapes.append((module.in_features,module.out_features))
+    if verbose:
+        print('Critical compression ratios (eta_c) per layer:')
+        for layer_num in range(len(eta_c)):
+            print(str(layer_num)+': '+str(round(eta_c[layer_num],5)))
+    return eta_c, in_out_shapes
