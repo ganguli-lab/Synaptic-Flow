@@ -6,7 +6,7 @@ from torch.linalg import norm as torchnorm
 
 def neural_persistence(model):
     totalNP = {}
-    sortedEdges = {}
+    sortedEdges = {} ##for the entire layer
 
     def compute_NP(name):
 
@@ -49,9 +49,9 @@ def neural_persistence(model):
                 for kk in range(cardMST):
                     d_arr[kk] = sorted(Tr.edges(data=True))[kk][2]['weight']
 
-                pdMat = torch.hstack((c_arr,d_arr))
+                pdMat = np.hstack((c_arr,d_arr))
 
-                pers = torch.abs(np.diff(pdMat,axis=-1))
+                pers = np.abs(np.diff(pdMat,axis=-1))
                 layerNP = norm(pers,ord=2)
                 if normalized:
                     layerNP = (layerNP-0)/((cardV-2)**0.5)
@@ -133,13 +133,14 @@ def neural_persistence(model):
                     for kk in range(cardMST):
                         d_arr[kk] = sorted(Tr.edges(data=True))[kk][2]['weight']
 
-                    pdMat = torch.hstack((c_arr,d_arr))
+                    pdMat = np.hstack((c_arr,d_arr))
 
-                    pers = torch.abs(np.diff(pdMat,axis=-1))
+                    pers = np.abs(np.diff(pdMat,axis=-1))
                     filterNP = norm(pers,ord=2)
                     if normalized:
                         filterNP = (filterNP-0)/((cardV-2)**0.5)
 
+                    filterNP_list[filtNum] = filterNP
                     filterEdges[filtNum] = sorted(Tr.edges(data=True))
 
                 totalNP[name] = np.sum(filterNP_list)
