@@ -7,6 +7,7 @@ from torch.linalg import norm as torchnorm
 def neural_persistence(model):
     totalNP = {}
     sortedEdges = {} ##for the entire layer
+    nodeIDs = {}
 
     def compute_NP(name):
 
@@ -57,8 +58,16 @@ def neural_persistence(model):
                     layerNP = (layerNP-0)/((cardV-2)**0.5)
 
                 totalNP[name] = layerNP
-                sortedEdges[name] = sorted(Tr.edges(data=True))
-            # return layerNP, sorted(Tr.edges(data=True))
+                currentEdges = sorted(Tr.edges(data=True))
+                sortedEdges[name] = currentEdges
+
+                ## MST to nodeIDs
+                nodeIDs[name] = np.zeros((cardMST,2),dtype=int) ##node In, node Out
+                for ii in range(cardMST):
+                    nodeIDs[name][ii,0] = currentEdges[ii][0]
+                    nodeIDs[name][ii,1] = currentEdges[ii][1] - d1
+
+            # return layerNP, sorted(Tr.edges(data=True)), nodeIDs
 
             if isinstance(module, layers.Conv2d) or isinstance(module, nn.Conv2d): ## Convolutional Layers
 
@@ -71,6 +80,7 @@ def neural_persistence(model):
 
                 filterNP_list = np.zeros(nFilters)
                 filterEdges = {}
+                filterNodeIDs = {}
 
                 for filtNum in range(nFilters):
                     h_max = np.max(allWeightsSum[filtNum])
@@ -124,7 +134,7 @@ def neural_persistence(model):
 
                     Adj += Adj.T
 
-                    Gr = nx.from_numpy_array(Adj)
+                    Gr = nx.from_numpy_array(Adj.T) ## NOTE: Graph is computed on the transposed Adj to ensure consistency with linear layers
                     Tr = nx.maximum_spanning_tree(Gr)
 
                     d_arr = np.zeros(cardMST).reshape(-1,1)
@@ -137,14 +147,27 @@ def neural_persistence(model):
 
                     pers = np.abs(np.diff(pdMat,axis=-1))
                     filterNP = norm(pers,ord=2)
+
                     if normalized:
                         filterNP = (filterNP-0)/((cardV-2)**0.5)
 
                     filterNP_list[filtNum] = filterNP
-                    filterEdges[filtNum] = sorted(Tr.edges(data=True))
+                    currentEdges = sorted(Tr.edges(data=True))
+                    filterEdges[filtNum] = currentEdges
+
+                    ## MST to nodeIDs
+                    fNodeIDs = np.zeros((cardMST,2),dtype=int) ##node In, node Out
+
+                    for ii in range(cardMST):
+                        fNodeIDs[ii,0] = currentEdges[ii][0]
+                        fNodeIDs[ii,1] = currentEdges[ii][1] - nodesIn
+
+                    filterNodeIDs[filtNum] = fNodeIDs
 
                 totalNP[name] = np.sum(filterNP_list)
                 sortedEdges[name] = filterEdges
+                nodeIDs[name] = filterNodeIDs
+
             # return layerNP, sorted(Tr.edges(data=True))
 
         return hook
@@ -152,4 +175,4 @@ def neural_persistence(model):
     for name, module in model.named_modules():
         module.register_forward_hook(compute_NP(name))
 
-    return totalNP, sortedEdges
+    return totalNP, sortedEdges, nodeIDs
