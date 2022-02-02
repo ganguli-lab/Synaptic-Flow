@@ -81,6 +81,7 @@ def neural_persistence(model):
                 filterNP_list = np.zeros(nFilters)
                 filterEdges = {}
                 filterNodeIDs = {}
+                convNodeIDs = {}
 
                 for filtNum in range(nFilters):
                     h_max = np.max(allWeightsSum[filtNum])
@@ -88,9 +89,11 @@ def neural_persistence(model):
 
                     if len(W_prime.shape)==3:
                         nChannels, kRows, kCols = W_prime.shape ##W_prime is a 3D tensor
+                        filtIndices = np.reshape(np.arange(kRows*kCols),(kRows,kCols))
                     else:
                         nChannels = 1
                         kRows, kCols = W_prime.shape ##W_prime is a 2D tensor, same size as spatial kernel
+                        filtIndices = np.reshape(np.arange(kRows*kCols),(kRows,kCols))
 
                     inputSizes, outputSizes = in_out_sizes
 
@@ -104,9 +107,11 @@ def neural_persistence(model):
                     cardMST = cardV - 1
 
                     bigW_prime = np.zeros((nodesOut,nodesIn))
+                    bigConvIndices = np.zeros((nodesOut,nodesIn))
 
                     ##Arrange conv weights into FC-type weight matrix bigW_prime
                     convWeights = np.zeros(nodesIn)
+                    convIndices = np.zeros(nodesIn)-1
                     for ii in range(kRows):
                         convWeights[(ii*inCols):(ii*inCols)+kCols] = W_prime[ii]
 
@@ -120,6 +125,7 @@ def neural_persistence(model):
                     for jj in range(nodesOut):
                         rollIdx = np.ravel_multi_index(np.array([rowCtr,colCtr]),(inRows,inCols))
                         bigW_prime[jj] = np.roll(convWeights.copy(),rollIdx)
+                        bigConvIndices[jj] = np.roll(convIndices.copy(),rollIdx)
                         colCtr += 1
                         if colCtr%nHSteps == 0:
                             rowCtr += 1
@@ -134,7 +140,7 @@ def neural_persistence(model):
 
                     Adj += Adj.T
 
-                    Gr = nx.from_numpy_array(Adj.T) ## NOTE: Graph is computed on the transposed Adj to ensure consistency with linear layers
+                    Gr = nx.from_numpy_array(Adj)
                     Tr = nx.maximum_spanning_tree(Gr)
 
                     d_arr = np.zeros(cardMST).reshape(-1,1)
@@ -157,16 +163,23 @@ def neural_persistence(model):
 
                     ## MST to nodeIDs
                     fNodeIDs = np.zeros((cardMST,2),dtype=int) ##node In, node Out
+                    convfNodeIDs = np.zeros((cardMST,2),dtype=int)
 
                     for ii in range(cardMST):
                         fNodeIDs[ii,0] = currentEdges[ii][0]
-                        fNodeIDs[ii,1] = currentEdges[ii][1] - nodesIn
+                        fNodeIDs[ii,1] = currentEdges[ii][1] - nodesOut #nodesIn
+                        r = fNodeIDs[ii,0]
+                        c = fNodeIDs[ii,1]
+                        pos1, pos2 = np.where(filtIndices==int(bigConvIndices[r,c]))
+                        convfNodeIDs[ii,0] = pos1[0]
+                        convfNodeIDs[ii,1] = pos2[0]
 
                     filterNodeIDs[filtNum] = fNodeIDs
+                    convNodeIDs[filtNum] = convfNodeIDs
 
                 totalNP[name] = np.sum(filterNP_list)
                 sortedEdges[name] = filterEdges
-                nodeIDs[name] = filterNodeIDs
+                nodeIDs[name] = convNodeIDs
 
             # return layerNP, sorted(Tr.edges(data=True))
 
