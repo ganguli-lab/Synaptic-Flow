@@ -1,9 +1,12 @@
 import torch
 import torch.nn as nn
+from torch.linalg import norm as torchnorm
 import numpy as np
+from numpy.linalg import norm
 import pandas as pd
 from prune import * 
 from Layers import layers
+import networkx as nx
 
 def summary(model, scores, flops, prunable):
     r"""Summary of compression results for a model.
@@ -115,99 +118,180 @@ def flop(model, input_shape, device):
 
 #     return pd.DataFrame(rows, columns=columns)
 
+
+
 def neural_persistence(model):
-    total = {}
-    
-    # find the maximum weight in the network (h_max), to normalize all weights
-    weights_all = []
-    for name, param in model.named_parameters():
-        if 'weight' in name: # finds max weight per layer
-            weights_all.append(np.double(torch.max(torch.abs(param)).detach().numpy()))
-    h_max = max(weights_all)
-    
-    def compute_NP(name, h_max):
-        def hook(module, h_max, input, output):
-            NPs = {}
-            if isinstance(module, layers.Linear) or isinstance(module, nn.Linear):
+    totalNP = {}
+    sortedEdges = {} ##for the entire layer
+    nodeIDs = {}
+
+    def compute_NP(name):
+
+        def hook(module, input, output):
+            # NPs = {}
+
+            if isinstance(module, layers.Linear) or isinstance(module, nn.Linear): ## Fully connected layers
                 """
-                Pseudocode was obtained from Algorithm 1 in Rieck et al., 2019 
+                Uses networkx to compute the MST
                 """
-                # extract weights
-                weights = module.weights
+                ## extract weights
+                ## shape is (nodesIn, nodesOut)
+                weights_np = module.weights.detach().cpu().numpy()
 
-                # normalize by the largest weight
-                h_prime = torch.abs(weights/h_max)
+                ## find the largest weight
+                h_max = np.max(np.abs(weights_np))
 
-#                 for k in range(num_layer):
-                    # establish filtration of kth layer 
-                    
-                    
-                    # calculate persistence diagram
-                                    
-                
-            if isinstance(module, layers.Conv2d) or isinstance(module, nn.Conv2d): #computes on a per filter basis
-                """
-                Pseudocode was obtained from Section A.4 in Rieck et al., 2019 
-                """
-                # extract weights
-                weights = module.weights
-                
-                # initalize number of tuples, tuple counter, weight index
-                # number of input neurons (m), number of output neurons (n)
-                m = module.in_features
-                n = module.out_features
-                tau = m + n
-                t = 0
-                i = 0
+                ## normalize by the largest weight
+                W_prime = np.abs(weights_np/h_max)
 
-                # transform weights for filtration
-                h_prime = torch.abs(weights/h_max)
+                d1, d2 = weights_np.shape
 
-                # sort weights in descending order
-                h_sort =  torch.sort(torch.flatten(h_prime), dim=0, descending=True)
+                cardV = np.sum(d1+d2)
+                cardMST = cardV - 1
 
-                # determine the set of all corner weights for filter H', p & q are filter dimensions
-                p = module.conv.kernel_size[0]
-                q = module.conv.kernel_size[1]
-                
-                h_corner = {h_prime[0,0],h_prime[0,q-1], h_prime[p-1,0], h_prime[p-1,q-1]}
-                # get the indices for the corner weights in the vectorized version of the filter
-                corner_idx = [0, q-1, p*(q-1), (p*q)-1]
+                Adj = np.zeros((cardV,cardV))
 
-                # add tuple for surviving component
-                NPs.append((1,0))
-            
-                # Each corner of H' merges components
-                for c in range(len(h_corner)):
-                    NPs.append((1, h_corner[c]))
-                    t+=1
-                
-#                 # create the remaining tuples
-#                 while 1 do:
-#                     # if current weight is corner, write one less tuple
-#                     if i in corner_idx:
-#                         n_prime = n - 1
-#                     else:
-#                         n_prime = n 
-                    
-#                     # if there are at least n' ,or tuples, set merge value to sorted[i]
-#                     if t+n_prime <= tau:
-#                         for j in range(n_prime):
-#                             NPs.append((1,h_sort[i]))
-#                         t+=n_prime
-#                         i+=1
-#                     else:
-#                         for j in range(tau-t):
-#                             NPs.append((1, h_sort[i]))
-#                         break
-                # compute norm of approximated persistence diagram
-                NPs = torch.norm(NPs, 2)
+                for ii in range(d1):
+                    for jj in range(d2):
+                        Adj[d1+jj,ii] = W_prime[ii,jj]
 
-            total[name] = NPs
+                Adj += Adj.T
+
+                Gr = nx.from_numpy_array(Adj)
+                Tr = nx.maximum_spanning_tree(Gr)
+
+                d_arr = np.zeros(cardMST).reshape(-1,1)
+                c_arr = np.ones(cardMST).reshape(-1,1)
+
+                for kk in range(cardMST):
+                    d_arr[kk] = sorted(Tr.edges(data=True))[kk][2]['weight']
+
+                pdMat = np.hstack((c_arr,d_arr))
+
+                pers = np.abs(np.diff(pdMat,axis=-1))
+                layerNP = norm(pers,ord=2)
+                if normalized:
+                    layerNP = (layerNP-0)/((cardV-2)**0.5)
+
+                totalNP[name] = layerNP
+                currentEdges = sorted(Tr.edges(data=True))
+                sortedEdges[name] = currentEdges
+
+                ## MST to nodeIDs
+                nodeIDs[name] = np.zeros((cardMST,2),dtype=int) ##node In, node Out
+                for ii in range(cardMST):
+                    nodeIDs[name][ii,0] = currentEdges[ii][0]
+                    nodeIDs[name][ii,1] = currentEdges[ii][1] - d1
+
+            # return layerNP, sorted(Tr.edges(data=True)), nodeIDs
+
+            if isinstance(module, layers.Conv2d) or isinstance(module, nn.Conv2d): ## Convolutional Layers
+
+                ## extract weights
+                ## weights shape = (#filters, #channels, krows, kcols)
+                weights_np = module.weights.detach().cpu().numpy()
+
+                nFilters = weights_np.shape[0]
+                allWeightsSum = np.sum(np.abs(weights_np),axis=1) ## Absolute weights summed across channels of a filter
+
+                filterNP_list = np.zeros(nFilters)
+                filterEdges = {}
+                filterNodeIDs = {}
+
+                for filtNum in range(nFilters):
+                    h_max = np.max(allWeightsSum[filtNum])
+                    W_prime = allWeightsSum[filtNum]/h_max ## Normalized weights of conv kernel
+
+                    if len(W_prime.shape)==3:
+                        nChannels, kRows, kCols = W_prime.shape ##W_prime is a 3D tensor
+                    else:
+                        nChannels = 1
+                        kRows, kCols = W_prime.shape ##W_prime is a 2D tensor, same size as spatial kernel
+
+                    inputSizes, outputSizes = in_out_sizes
+
+                    inRows, inCols = inputSizes
+                    outRows, outCols = outputSizes
+
+                    nodesIn = np.prod(inputSizes)
+                    nodesOut = np.prod(outputSizes)
+
+                    cardV = np.sum(nodesIn+nodesOut)
+                    cardMST = cardV - 1
+
+                    bigW_prime = np.zeros((nodesOut,nodesIn))
+
+                    ##Arrange conv weights into FC-type weight matrix bigW_prime
+                    convWeights = np.zeros(nodesIn)
+                    for ii in range(kRows):
+                        convWeights[(ii*inCols):(ii*inCols)+kCols] = W_prime[ii]
+
+                    ## assume stride of 1 in both directions
+                    nHSteps = inCols - kCols + 1
+                    nVSteps = inRows - kRows + 1
+
+                    rowCtr = 0
+                    colCtr = 0
+
+                    for jj in range(nodesOut):
+                        rollIdx = np.ravel_multi_index(np.array([rowCtr,colCtr]),(inRows,inCols))
+                        bigW_prime[jj] = np.roll(convWeights.copy(),rollIdx)
+                        colCtr += 1
+                        if colCtr%nHSteps == 0:
+                            rowCtr += 1
+                            colCtr = 0
+
+                    Adj = np.zeros((cardV,cardV))
+                    d1, d2 = bigW_prime.shape
+
+                    for ii in range(d1):
+                        for jj in range(d2):
+                            Adj[d1+jj,ii] = bigW_prime[ii,jj]
+
+                    Adj += Adj.T
+
+                    Gr = nx.from_numpy_array(Adj.T) ## NOTE: Graph is computed on the transposed Adj to ensure consistency with linear layers
+                    Tr = nx.maximum_spanning_tree(Gr)
+
+                    d_arr = np.zeros(cardMST).reshape(-1,1)
+                    c_arr = np.ones(cardMST).reshape(-1,1)
+
+                    for kk in range(cardMST):
+                        d_arr[kk] = sorted(Tr.edges(data=True))[kk][2]['weight']
+
+                    pdMat = np.hstack((c_arr,d_arr))
+
+                    pers = np.abs(np.diff(pdMat,axis=-1))
+                    filterNP = norm(pers,ord=2)
+
+                    if normalized:
+                        filterNP = (filterNP-0)/((cardV-2)**0.5)
+
+                    filterNP_list[filtNum] = filterNP
+                    currentEdges = sorted(Tr.edges(data=True))
+                    filterEdges[filtNum] = currentEdges
+
+                    ## MST to nodeIDs
+                    fNodeIDs = np.zeros((cardMST,2),dtype=int) ##node In, node Out
+
+                    for ii in range(cardMST):
+                        fNodeIDs[ii,0] = currentEdges[ii][0]
+                        fNodeIDs[ii,1] = currentEdges[ii][1] - nodesIn
+
+                    filterNodeIDs[filtNum] = fNodeIDs
+
+                totalNP[name] = np.sum(filterNP_list)
+                sortedEdges[name] = filterEdges
+                nodeIDs[name] = filterNodeIDs
+
+            # return layerNP, sorted(Tr.edges(data=True))
+
         return hook
+
     for name, module in model.named_modules():
         module.register_forward_hook(compute_NP(name))
-    return total
+
+    return totalNP, sortedEdges, nodeIDs
 
 def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbose):
     """
@@ -227,8 +311,9 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
     - verbose      = If True, will execute print statement
     
     Outputs:
-    - eta_c         = List of layer-wise critical compression ratios 
-    - in_out_shapes = List of layer-wise input and output sizes
+    - eta_c_list         = List of layer-wise critical compression ratios
+    - layers_n_shapes = List of layer-wise input and output sizes
+    - eta_c_all     = Total compression ratio
     
     Notes:
     - These are tailored to how the models and datasets in the SynFlow repo (https://github.com/ganguli-lab/Synaptic-Flow) were scripted
@@ -251,15 +336,66 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
     names = []
     for name, module in model.named_modules():
         names.append(name)
-
-    # log the compression ratios on a per layer basis
-    eta_c = []
     
-    #log the input and output shapes
-    in_out_shapes = []
+    # log the compression ratios on a per layer basis
+    eta_c_list = []
+    
+    # convolutional, dense, and total compresstion ratio = (total parameters)/(parameters kept)
+    num_conv = 0
+    denom_conv = 0
+    num_dense = 0
+    denom_dense = 0
+    num_tot = 0
+    denom_tot = 0
+    
+    # log the input and output shapes for the layers that will be pruned
+    layers_n_shapes = {}
 
     outs = [] # keep track of output dimensions
-    if "cifar10" in dataset_name:
+    if "mnist" in dataset_name:
+        if "fc" in model_name:
+            """Compute eta_c for FCNN style model wrt MNIST"""
+            layer_names_of_interest = ['1','3','5','7','9','11']
+            for name, module in model.named_modules():
+                if any(x in name for x in layer_names_of_interest):
+                    eta_c_list.append(((module.in_features*module.out_features))/
+                                      (module.in_features+module.out_features-1))
+                    layers_n_shapes[name] = ((module.in_features,module.out_features))
+                    num_dense   += (module.in_features*module.out_features)
+                    denom_dense += (module.in_features+module.out_features-1)
+                    num_tot     += (module.in_features*module.out_features)
+                    denom_tot   += (module.in_features+module.out_features-1)
+            denom_conv = 1
+        elif "conv" in model_name:
+            """Compute eta_c for CNN style model wrt MNIST"""
+            conv_layers = ['0','2']
+            for name, module in model.named_modules():
+                mod = module.eval()
+                outs.append(out.shape)
+                # conv layers
+                if any(x in name for x in conv_layers):
+                    out = mod(out.clone().detach().float().to(device))
+                    if outs[-1][2] != out.shape[2]: # account for downsampling/pooling
+                        outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
+                    m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
+                    n = out.shape[2]*out.shape[3]       # dimensions of output
+                    eta_c_list.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                    layers_n_shapes[name] = (((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                    num_conv   += (n*(3**2))
+                    denom_conv += (m+n-1)
+                    num_tot    += (n*(3**2))
+                    denom_tot  += (m+n-1)
+                # dense layer
+                elif name == "5":
+                    eta_c_list.append(((module.in_features*module.out_features))/
+                                      (module.in_features+module.out_features-1))
+                    layers_n_shapes[name] = ((module.in_features,module.out_features))
+                    num_dense   += (module.in_features*module.out_features)
+                    denom_dense += (module.in_features+module.out_features-1)
+                    num_tot     += (module.in_features*module.out_features)
+                    denom_tot   += (module.in_features+module.out_features-1)
+            
+    elif "cifar10" in dataset_name:
         # keep track of location in names list
         ind = 0
         if 'vgg' in model_name:
@@ -273,11 +409,19 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
                 if '.conv' in name:
                     m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input, +2 is for padding
                     n = out.shape[2]*out.shape[3]       # dimensions of output
-                    eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
-                    in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3]))) # +2 is for padding
+                    eta_c_list.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                    layers_n_shapes[name] = (((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3]))) # +2 is for padding
+                    num_conv   += (n*(3**2))
+                    denom_conv += (m+n-1)
+                    num_tot    += (n*(3**2))
+                    denom_tot  += (m+n-1)
                 if 'fc' in name:
-                    eta_c.append(((module.in_features*module.out_features))/(module.in_features+module.out_features-1))
-                    in_out_shapes.append((module.in_features,module.out_features))
+                    eta_c_list.append(((module.in_features*module.out_features))/(module.in_features+module.out_features-1))
+                    layers_n_shapes[name] = ((module.in_features,module.out_features))
+                    num_dense   += (module.in_features*module.out_features)
+                    denom_dense += (module.in_features+module.out_features-1)
+                    num_tot     += (module.in_features*module.out_features)
+                    denom_tot   += (module.in_features+module.out_features-1)
                 ind+=1 
 
         elif 'resnet' in model_name: 
@@ -288,22 +432,28 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
                 outs.append(out.shape)
                 if ind+1 < len(names):
                     if 'conv' in name:
-#                         print(module)
                         out = mod(out.clone().detach().float().to(device))
-                        if outs[-1][2] != out.shape[2]: # account for downsampling
+                        if outs[-1][2] != out.shape[2]: # account for downsampling/pooling
                             outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
                         m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
                         n = out.shape[2]*out.shape[3]       # dimensions of output
-                        # get the kernel size, not hard code
-                        eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
-                        in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                        eta_c_list.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                        layers_n_shapes[name] = (((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                        num_conv   += (n*(3**2))
+                        denom_conv += (m+n-1)
+                        num_tot    += (n*(3**2))
+                        denom_tot  += (m+n-1)
                         ind += 1
                     if 'fc' in name: # otherwise it's the dense layer
                         out = F.avg_pool2d(out, out.size()[3])
                         out = out.view(out.size(0), -1)
                         out = mod(out.clone().detach().float().to(device))
-                        eta_c.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
-                        in_out_shapes.append((module.in_features,module.out_features))
+                        eta_c_list.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
+                        layers_n_shapes[name] = ((module.in_features,module.out_features))
+                        num_dense   += (module.in_features*module.out_features)
+                        denom_dense += (module.in_features+module.out_features-1)
+                        num_tot     += (module.in_features*module.out_features)
+                        denom_tot   += (module.in_features+module.out_features-1)
 
     elif "tiny" in dataset_name:
 
@@ -321,8 +471,12 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
                         if any(x in name for x in dense_locations):
                             mod = module.eval()
                             out = mod(out.clone().detach().float().to(device))
-                            eta_c.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
-                            in_out_shapes.append((module.in_features,module.out_features))
+                            eta_c_list.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
+                            layers_n_shapes[name] = ((module.in_features,module.out_features))
+                            num_dense   += (module.in_features*module.out_features)
+                            denom_dense += (module.in_features+module.out_features-1)
+                            num_tot     += (module.in_features*module.out_features)
+                            denom_tot   += (module.in_features+module.out_features-1)
                 elif 'features' in name:#conv layers
                     if name[-1].isnumeric():
                         #Conv operations
@@ -331,8 +485,12 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
                             out = mod(out.clone().detach().float().to(device))
                             m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
                             n = out.shape[2]*out.shape[3]       # dimensions of output
-                            eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
-                            in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                            eta_c_list.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                            layers_n_shapes[name] = (((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                            num_conv   += (n*(3**2))
+                            denom_conv += (m+n-1)
+                            num_tot    += (n*(3**2))
+                            denom_tot  += (m+n-1)
                         #Maxpool operations
                         elif any(x in name for x in pool_locations):
                             mod = module.eval()
@@ -354,8 +512,12 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
                         outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
                     m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
                     n = out.shape[2]*out.shape[3]       # dimensions of output
-                    eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
-                    in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                    eta_c_list.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                    layers_n_shapes[name] = (((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                    num_conv   += (n*(3**2))
+                    denom_conv += (m+n-1)
+                    num_tot    += (n*(3**2))
+                    denom_tot  += (m+n-1)
                 elif '_x' in name and 'residual' in name:
                     if name[-1] in conv_locations:
                         # all other conv layers that are not in shortut
@@ -364,18 +526,35 @@ def eta_c_compute(model_name, model, dataset_name, input_shape, gpu_idxs, verbos
                             outs[-1] = torch.rand((1,int(outs[-1][1]*2),int(outs[-1][2]/2),int(outs[-1][3]/2))).shape
                         m = (outs[-1][2]+2)*(outs[-1][3]+2) # dimensions of input
                         n = out.shape[2]*out.shape[3]       # dimensions of output
-                        eta_c.append((n*(3**2))/(m+n-1))    # kernel size is 3
-                        in_out_shapes.append(((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                        eta_c_list.append((n*(3**2))/(m+n-1))    # kernel size is 3
+                        layers_n_shapes[name] = (((outs[-1][2]+2,outs[-1][3]+2),(out.shape[2],out.shape[3])))
+                        num_conv   += (n*(3**2))
+                        denom_conv += (m+n-1)
+                        num_tot    += (n*(3**2))
+                        denom_tot  += (m+n-1)
                 elif name == 'fc':
                     # dense layers, will need to change with different sized resnets 
                     # (number of dense layers will change)
                     out = avg_pool(out)
                     out = out.view(out.size(0), -1)
                     out = mod(out.clone().detach().float().to(device))
-                    eta_c.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
-                    in_out_shapes.append((module.in_features,module.out_features))
+                    eta_c_list.append((module.in_features*module.out_features)/(module.in_features+module.out_features-1))
+                    layers_n_shapes[name] = ((module.in_features,module.out_features))
+                    num_dense   += (module.in_features*module.out_features)
+                    denom_dense += (module.in_features+module.out_features-1)
+                    num_tot     += (module.in_features*module.out_features)
+                    denom_tot   += (module.in_features+module.out_features-1)
+    
+    # compute average compression ratios for conv and dense layers as well as total compression ratio
+    eta_c_total = num_tot/denom_tot
+    eta_c_conv  = num_conv/denom_conv
+    eta_c_dense = num_dense/denom_dense
+    
     if verbose:
         print('Critical compression ratios (eta_c) per layer:')
-        for layer_num in range(len(eta_c)):
-            print(str(layer_num)+': '+str(round(eta_c[layer_num],5)))
-    return eta_c, in_out_shapes
+        for n in range(len(eta_c_list)):
+            print(str(n)+'   '+list(layers_n_shapes.keys())[n]+': '+str(round(eta_c_list[n],5)))
+        print('Average critical compression ratio (eta_c) for Conv Layers: {}'.format(str(round(eta_c_conv,5))))
+        print('Average critical compression ratio (eta_c) for Dense Layers: {}'.format(str(round(eta_c_dense,5))))
+        print('Net critical compression ratio (eta_c): {}'.format(str(round(eta_c_total,5))))
+    return eta_c_list, layers_n_shapes, eta_c_total
