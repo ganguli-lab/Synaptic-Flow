@@ -23,17 +23,24 @@ import multiprocessing as mp
 #     return bigAdj
 
 def layer_neural_persistence(W=None,NPType='NP',Adj=None,normalized=True, in_out_sizes = ((1,1),(1,1))):
+    #Inputs: W: Weight matrix
+    # NPType: Score for entire layer, neural persistence
+    # Adj: If there is a precomputed adjacency matrix
+    # normalized: If the neural persistence calc is to be normalized
+    # in_out_sizes: tuple of sizes of inputs and outputs to layer
     
     if W is not None:
+        #For dense layers
         if len(W.shape) == 2:
             d1, d2 = W.shape
 
-            wm = np.max(np.abs(W))
+            wm = np.max(np.abs(W)) #Normalizing weight matrix
             W_prime = np.abs(W)/(wm)
 
-            cardV = np.sum(d1+d2)
+            cardV = np.sum(d1+d2) #Cardinality
             cardMST = cardV - 1
 
+            #Adjacency matrix calculation if needed
             if Adj is None:
                 Adj = np.zeros((cardV,cardV))
 
@@ -44,31 +51,33 @@ def layer_neural_persistence(W=None,NPType='NP',Adj=None,normalized=True, in_out
                 Adj += Adj.T
 
             cardV, cardV = Adj.shape
-            cardMST = cardV - 1
+            cardMST = cardV - 1 #Calculate cardinality of MST
 
+            #Build spanning tree of graph, graph built from adjacency matrix
             Gr = nx.from_numpy_array(Adj)
             Tr = nx.maximum_spanning_tree(Gr)
 
+            #death times (d_arr), creation times (c_arr), persistence diagram
             d_arr = np.zeros(cardMST).reshape(-1,1)
-            c_arr = np.ones(cardMST).reshape(-1,1)
+            c_arr = np.ones(cardMST).reshape(-1,1) #Everything is born at 1
 
             for kk in range(cardMST):
-                d_arr[kk] = sorted(Tr.edges(data=True))[kk][2]['weight']
+                d_arr[kk] = sorted(Tr.edges(data=True))[kk][2]['weight'] #Sort based on persistence, giving death times
 
-            pdMat = np.hstack((c_arr,d_arr))
+            pdMat = np.hstack((c_arr,d_arr)) #persistence diagram matrix
             
             # formerly outputNP
-            if NPType == 'NP':
+            if NPType == 'NP': #Neural persistence 
                 pers = np.abs(np.diff(pdMat,axis=-1))
                 outputNP = norm(pers,ord=2)
                 if normalized:
                     outputNP = (outputNP-0)/((cardV-2)**0.5)
-            elif NPType == 'EP':
+            elif NPType == 'EP': #Edge persistence (unfinished trial work)
                 outputNP = norm(pdMat,ord='fro')
                 if normalized:
                     outputNP = (outputNP-(cardV**0.5))/((2*cardMST)**0.5)
         
-        else: # Convolutional Layer
+        else: # Convolutional Layer, similar order of steps as earlier except w.r.t. looping over filters and Toeplitz matrix building
             nFilters = W.shape[0]
             allWeightsSum = np.sum(np.abs(W),axis=1) ## Absolute weights summed across channels of a filter
 
@@ -96,6 +105,7 @@ def layer_neural_persistence(W=None,NPType='NP',Adj=None,normalized=True, in_out
                 cardV = np.sum(nodesIn+nodesOut)
                 cardMST = cardV - 1
 
+                #Final toeplitz matrix
                 bigW_prime = np.zeros((nodesOut,nodesIn))
 
                 ##Arrange conv weights into FC-type weight matrix bigW_prime
@@ -128,7 +138,7 @@ def layer_neural_persistence(W=None,NPType='NP',Adj=None,normalized=True, in_out
                 Adj += Adj.T
 
                 Gr = nx.from_numpy_array(Adj)
-                Tr = nx.maximum_spanning_tree(Gr)
+                Tr = nx.maximum_spanning_tree(Gr) #TODO possible GPU usage
 
                 # d_arr = np.zeros(cardMST).reshape(-1,1)
                 c_arr = np.ones(cardMST).reshape(-1,1)
@@ -150,6 +160,8 @@ def layer_neural_persistence(W=None,NPType='NP',Adj=None,normalized=True, in_out
                     filterNP = (filterNP-0)/((cardV-2)**0.5)
                 filterNP_list[filtNum] = filterNP
             outputNP = np.sum(filterNP_list)
+            #OutputNP: Single layer 'score'
+            #sorted(Tr...) is the score for layer weights -> TODO make sure conv output is in the required shape for a Pruner
     return outputNP#, sorted(Tr.edges(data=True))
 
 def sort_edges(d_arr, Gr, kk):
