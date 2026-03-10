@@ -23,6 +23,7 @@ class Pruner:
         if not k < 1:
             threshold, _ = torch.kthvalue(global_scores, k)
             for mask, param in self.masked_parameters:
+                # print(threshold, torch.max(mask))
                 score = self.scores[id(param)] 
                 zero = torch.tensor([0.]).to(mask.device)
                 one = torch.tensor([1.]).to(mask.device)
@@ -69,16 +70,19 @@ class Pruner:
             mask = mask.reshape(-1)[perm].reshape(shape)
 
     def invert(self):
+        # for v in self.scores.values():
+        #     v.div_(v**2)
+        
         for v in self.scores.values():
-            v.div_(v**2)
+            v.copy_(1.0 / (v + 1e-8))
 
     def stats(self):
         r"""Returns remaining and total number of prunable parameters.
         """
         remaining_params, total_params = 0, 0 
         for mask, _ in self.masked_parameters:
-             remaining_params += mask.detach().cpu().numpy().sum()
-             total_params += mask.numel()
+            remaining_params += mask.detach().cpu().numpy().sum()
+            total_params += mask.numel()
         return remaining_params, total_params
 
 
@@ -180,7 +184,7 @@ class SynFlow(Pruner):
         super(SynFlow, self).__init__(masked_parameters)
 
     def score(self, model, loss, dataloader, device):
-      
+        
         @torch.no_grad()
         def linearize(model):
             # model.double()
@@ -200,11 +204,16 @@ class SynFlow(Pruner):
 
         (data, _) = next(iter(dataloader))
         input_dim = list(data[0,:].shape)
-        input = torch.ones([1] + input_dim).to(device)#, dtype=torch.float64).to(device)
+        input = torch.ones([1] + input_dim).to(device) #, dtype=torch.float64).to(device)
         output = model(input)
         torch.sum(output).backward()
+
         
         for _, p in self.masked_parameters:
+            # print(torch.max(p).cpu().item(), torch.min(p).cpu().item(), torch.mean(p).cpu().item(), torch.sum(p).cpu().item(), torch.var(p).cpu().item())
+            # print(torch.max(p.grad).cpu().item(), torch.min(p.grad).cpu().item(), torch.mean(p.grad).cpu().item(), torch.sum(p.grad).cpu().item(), torch.var(p.grad).cpu().item())
+            # print(torch.max(p.grad * p).cpu().item(), torch.min(p.grad * p).cpu().item(), torch.mean(p.grad * p).cpu().item(), torch.sum(p.grad * p).cpu().item(), torch.var(p.grad * p).cpu().item())
+            # print()
             self.scores[id(p)] = torch.clone(p.grad * p).detach().abs_()
             p.grad.data.zero_()
 

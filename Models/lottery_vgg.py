@@ -45,7 +45,10 @@ class VGG(nn.Module):
                 layer_list.append(conv(filters, spec))
                 filters = spec
 
-        self.layers = nn.Sequential(*layer_list)        
+        self.layers = nn.Sequential(*layer_list) 
+        
+        self.fc1 = layers.Linear(512, 1024)  
+        self.fc2 = layers.Linear(1024, 512)            
 
         self.fc = layers.Linear(512, num_classes)
         if dense_classifier:
@@ -57,6 +60,8 @@ class VGG(nn.Module):
         x = self.layers(x)
         x = nn.AvgPool2d(2)(x)
         x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+        x = self.fc2(x)
         x = self.fc(x)
         return x
 

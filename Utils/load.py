@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 from torchvision import datasets, transforms
+from torch.utils.data import TensorDataset,DataLoader,Dataset
+import torchvision
 import torch.optim as optim
 from Models import mlp
 from Models import lottery_vgg
@@ -9,6 +11,14 @@ from Models import tinyimagenet_vgg
 from Models import tinyimagenet_resnet
 from Models import imagenet_vgg
 from Models import imagenet_resnet
+from Models import LeNet5_relu
+from Models import LeNet5_tanh
+from Models import vgg16_relu
+from Models import vgg16_tanh
+from Models import vgg11_relu
+from Models import vgg16_relu_new
+from Models import vgg16_relu_new_small
+from Models import vgg16s2
 from Pruners import pruners
 from Utils import custom_datasets
 
@@ -34,47 +44,75 @@ def get_transform(size, padding, mean, std, preprocess):
     if preprocess:
         transform.append(transforms.RandomCrop(size=size, padding=padding))
         transform.append(transforms.RandomHorizontalFlip())
-    transform.append(transforms.ToTensor())
+    # transform.append(transforms.ToTensor())
     transform.append(transforms.Normalize(mean, std))
     return transforms.Compose(transform)
 
-def dataloader(dataset, batch_size, train, workers, length=None):
+
+class TransformedTensorDataset(Dataset):
+    def __init__(self, tensors, transform=None):
+        self.images, self.labels = tensors
+        self.transform = transform
+
+    def __getitem__(self, index):
+        img = self.images[index]
+        label = self.labels[index]
+        if self.transform:
+            img = self.transform(img)
+        return img, label
+
+    def __len__(self):
+        return len(self.labels)
+
+def load_dataset_from_disk(path, batch_size=128, shuffle=True, transform=None):
+    data_path = f"{path}/data.pt"
+    images, labels = torch.load(data_path)
+    dataset = TransformedTensorDataset((images, labels), transform=transform)
+    return dataset
+
+
+def load_dataset_from_disk_mnist(path, batch_size=128, shuffle=True):
+    data_path = f"{path}/data.pt"
+    images, labels = torch.load(data_path)
+    dataset = TensorDataset(images, labels)
+    return dataset
+
+
+def dataloader(dataset, batch_size, train, workers, length=None, name = ""):
     # Dataset
     if dataset == 'mnist':
-        mean, std = (0.1307,), (0.3081,)
-        transform = get_transform(size=28, padding=0, mean=mean, std=std, preprocess=False)
-        dataset = datasets.MNIST('Data', train=train, download=True, transform=transform)
-    if dataset == 'cifar10':
-        mean, std = (0.491, 0.482, 0.447), (0.247, 0.243, 0.262)
-        transform = get_transform(size=32, padding=4, mean=mean, std=std, preprocess=train)
-        dataset = datasets.CIFAR10('Data', train=train, download=True, transform=transform) 
-    if dataset == 'cifar100':
-        mean, std = (0.507, 0.487, 0.441), (0.267, 0.256, 0.276)
-        transform = get_transform(size=32, padding=4, mean=mean, std=std, preprocess=train)
-        dataset = datasets.CIFAR100('Data', train=train, download=True, transform=transform)
-    if dataset == 'tiny-imagenet':
-        mean, std = (0.480, 0.448, 0.397), (0.276, 0.269, 0.282)
-        transform = get_transform(size=64, padding=4, mean=mean, std=std, preprocess=train)
-        dataset = custom_datasets.TINYIMAGENET('Data', train=train, download=True, transform=transform)
-    if dataset == 'imagenet':
-        mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
-        if train:
-            transform = transforms.Compose([
-                transforms.RandomResizedCrop(224, scale=(0.2,1.)),
-                transforms.RandomGrayscale(p=0.2),
-                transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
-                transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(),
-                transforms.Normalize(mean, std)])
+        if name == 'test':
+            dataset = datasets.MNIST('Data/', train=train, download=True, transform=transforms.Compose([transforms.ToTensor()]))
         else:
-            transform = transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
+            dataset = load_dataset_from_disk("Data/" + name, batch_size=batch_size)
+    if dataset == 'cifar10':
+        if name == 'test':
+            transform_test = torchvision.transforms.Compose([
                 transforms.ToTensor(),
-                transforms.Normalize(mean, std)])
-        folder = 'Data/imagenet_raw/{}'.format('train' if train else 'val')
-        dataset = datasets.ImageFolder(folder, transform=transform)
-    
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ])
+            dataset = datasets.CIFAR10('Data/', train=train, download=True, transform=transform_test)
+        else:
+            transform_test = torchvision.transforms.Compose([
+                # transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ])
+            mean, std = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+            transform = get_transform(size=32, padding=4, mean=mean, std=std, preprocess=train)
+            dataset = load_dataset_from_disk("Data/" + name, batch_size=batch_size, transform=transform_test)
+    if dataset == 'cifar100':
+        if name == 'test':
+            transform_test = torchvision.transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+            ])
+            dataset = datasets.CIFAR100('Data/', train=train, download=True, transform=transform_test)
+        else:
+            mean, std = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+            transform = get_transform(size=32, padding=4, mean=mean, std=std, preprocess=train)
+            dataset = load_dataset_from_disk("Data/" + name, batch_size=batch_size)
+        
+        
     # Dataloader
     use_cuda = torch.cuda.is_available()
     kwargs = {'num_workers': workers, 'pin_memory': True} if use_cuda else {}
@@ -90,10 +128,71 @@ def dataloader(dataset, batch_size, train, workers, length=None):
 
     return dataloader
 
+
+# def dataloader(dataset, batch_size, train, workers, length=None):
+#     # Dataset
+#     if dataset == 'mnist':
+#         mean, std = (0.1307,), (0.3081,)
+#         transform = get_transform(size=28, padding=0, mean=mean, std=std, preprocess=False)
+#         dataset = datasets.MNIST('Data', train=train, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+#     if dataset == 'cifar10':
+#         mean, std = (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)
+#         transform = get_transform(size=32, padding=4, mean=mean, std=std, preprocess=train)
+#         dataset = datasets.CIFAR10('Data', train=train, download=True, transform=transforms.Compose([transforms.ToTensor()])) 
+#     if dataset == 'cifar100':
+#         mean, std = (0.507, 0.487, 0.441), (0.267, 0.256, 0.276)
+#         transform = get_transform(size=32, padding=4, mean=mean, std=std, preprocess=train)
+#         dataset = datasets.CIFAR100('Data', train=train, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+#     if dataset == 'tiny-imagenet':
+#         mean, std = (0.480, 0.448, 0.397), (0.276, 0.269, 0.282)
+#         transform = get_transform(size=64, padding=4, mean=mean, std=std, preprocess=train)
+#         dataset = custom_datasets.TINYIMAGENET('Data', train=train, download=True, transform=transform)
+#     if dataset == 'imagenet':
+#         mean, std = (0.485, 0.456, 0.406), (0.229, 0.224, 0.225)
+#         if train:
+#             transform = transforms.Compose([
+#                 transforms.RandomResizedCrop(224, scale=(0.2,1.)),
+#                 transforms.RandomGrayscale(p=0.2),
+#                 transforms.ColorJitter(0.4, 0.4, 0.4, 0.4),
+#                 transforms.RandomHorizontalFlip(),
+#                 transforms.ToTensor(),
+#                 transforms.Normalize(mean, std)])
+#         else:
+#             transform = transforms.Compose([
+#                 transforms.Resize(256),
+#                 transforms.CenterCrop(224),
+#                 transforms.ToTensor(),
+#                 transforms.Normalize(mean, std)])
+#         folder = 'Data/imagenet_raw/{}'.format('train' if train else 'val')
+#         dataset = datasets.ImageFolder(folder, transform=transform)
+    
+#     # Dataloader
+#     use_cuda = torch.cuda.is_available()
+#     kwargs = {'num_workers': workers, 'pin_memory': True} if use_cuda else {}
+#     shuffle = train is True
+#     if length is not None:
+#         indices = torch.randperm(len(dataset))[:length]
+#         dataset = torch.utils.data.Subset(dataset, indices)
+
+#     dataloader = torch.utils.data.DataLoader(dataset=dataset, 
+#                                              batch_size=batch_size, 
+#                                              shuffle=shuffle, 
+#                                              **kwargs)
+
+#     return dataloader
+
 def model(model_architecture, model_class):
     default_models = {
         'fc' : mlp.fc,
         'conv' : mlp.conv,
+        'lenet5_relu': LeNet5_relu.LeNet5,
+        'lenet5_tanh': LeNet5_tanh.LeNet5,
+        'vgg16_relu': vgg16_relu.VGG,
+        'vgg16_tanh': vgg16_tanh.VGG,
+        'vgg11_relu': vgg11_relu.VGG,
+        'vgg16_relu_new': vgg16_relu_new.VGG,
+        'vgg16_relu_new_small': vgg16_relu_new_small.VGG,
+        "vgg16_s2": vgg16s2.VGG,
     }
     lottery_models = {
         'vgg11' : lottery_vgg.vgg11,

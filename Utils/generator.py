@@ -38,3 +38,6 @@ def masked_parameters(model, bias=False, batchnorm=False, residual=False):
         for mask, param in zip(masks(module), module.parameters(recurse=False)):
             if param is not module.bias or bias is True:
                 yield mask, param
+                
+                
+

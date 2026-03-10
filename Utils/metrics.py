@@ -2,38 +2,84 @@ import torch
 import torch.nn as nn
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import os
 from prune import * 
 from Layers import layers
 
-def summary(model, scores, flops, prunable):
+
+def summary(model, scores, flops, prunable, masked_parameters):
     r"""Summary of compression results for a model.
+    Also returns:
+      - total_fc_remaining: total number of remaining (unpruned) weights in all FC layers
+      - total_fc_full: total number of weights before pruning in all FC layers
     """
     rows = []
+    total_fc_remaining = 0
+    total_fc_full = 0
+    
+    total_removed_e = 0
+    total_removed_e_flip = 0
+
     for name, module in model.named_modules():
         for pname, param in module.named_parameters(recurse=False):
             pruned = prunable(module) and id(param) in scores.keys()
+
+            # Compute sparsity and score
             if pruned:
-                sparsity = getattr(module, pname+'_mask').detach().cpu().numpy().mean()
+                sparsity = getattr(module, pname + '_mask').detach().cpu().numpy().mean()
                 score = scores[id(param)].detach().cpu().numpy()
+                
             else:
                 sparsity = 1.0
                 score = np.zeros(1)
+
             shape = param.detach().cpu().numpy().shape
-            flop = flops[name][pname]
+            flop = 0 # flops[name][pname]
+
+            # Compute score statistics
             score_mean = score.mean()
             score_var = score.var()
             score_sum = score.sum()
             score_abs_mean = np.abs(score).mean()
-            score_abs_var  = np.abs(score).var()
-            score_abs_sum  = np.abs(score).sum()
-            rows.append([name, pname, sparsity, np.prod(shape), shape, flop,
-                         score_mean, score_var, score_sum, 
-                         score_abs_mean, score_abs_var, score_abs_sum, 
-                         pruned])
+            score_abs_var = np.abs(score).var()
+            score_abs_sum = np.abs(score).sum()
 
-    columns = ['module', 'param', 'sparsity', 'size', 'shape', 'flops', 'score mean', 'score variance', 
-               'score sum', 'score abs mean', 'score abs variance', 'score abs sum', 'prunable']
-    return pd.DataFrame(rows, columns=columns)
+            rows.append([
+                name, pname, sparsity, np.prod(shape), shape, flop,
+                score_mean, score_var, score_sum,
+                score_abs_mean, score_abs_var, score_abs_sum,
+                pruned
+            ])
+            
+            # Count total and remaining weights in fully connected (fc) layers
+            if 'weight' in pname.lower():
+                total_params = np.prod(shape)
+                remaining = total_params * sparsity
+                total_fc_full += total_params
+                total_fc_remaining += remaining
+
+            
+
+    columns = [
+        'module', 'param', 'sparsity', 'size', 'shape', 'flops',
+        'score mean', 'score variance', 'score sum',
+        'score abs mean', 'score abs variance', 'score abs sum',
+        'prunable'
+    ]
+    
+    for i, (mask, param) in enumerate(masked_parameters):
+        if i in [0]:
+            total_removed_e += ((mask == 0).sum().item()*1)
+        elif i in [1]:
+            total_removed_e += ((mask == 0).sum().item()*1)
+        else:
+            total_removed_e += (mask == 0).sum().item()
+        print(f'Removed {(mask == 0).sum().item()}, remaining {(mask == 1).sum().item()}')
+
+    df = pd.DataFrame(rows, columns=columns)
+    return df, total_fc_remaining, total_fc_full, total_removed_e
+
 
 def flop(model, input_shape, device):
 
@@ -81,38 +127,98 @@ def flop(model, input_shape, device):
     return total
 
 
-# def conservation(model, scores, batchnorm, residual):
-#     r"""Summary of conservation results for a model.
-#     """
-#     rows = []
-#     bias_flux = 0.0
-#     mu = 0.0
-#     for name, module in reversed(list(model.named_modules())):
-#         if prunable(module, batchnorm, residual):
-#             weight_flux = 0.0
-#             for pname, param in module.named_parameters(recurse=False):
-                
-#                 # Get score
-#                 score = scores[id(param)].detach().cpu().numpy()
-                
-#                 # Adjust batchnorm bias score for mean and variance
-#                 if isinstance(module, (layers.Linear, layers.Conv2d)) and pname == "bias":
-#                     bias = param.detach().cpu().numpy()
-#                     score *= (bias - mu) / bias
-#                     mu = 0.0
-#                 if isinstance(module, (layers.BatchNorm1d, layers.BatchNorm2d)) and pname == "bias":
-#                     mu = module.running_mean.detach().cpu().numpy()
-                
-#                 # Add flux
-#                 if pname == "weight":
-#                     weight_flux += score.sum()
-#                 if pname == "bias":
-#                     bias_flux += score.sum()
-#             layer_flux = weight_flux
-#             if not isinstance(module, (layers.Identity1d, layers.Identity2d)):
-#                 layer_flux += bias_flux
-#             rows.append([name, layer_flux])
-#     columns = ['module', 'score flux']
+def plot_curve(
+    neg_clean_acc, pos_clean_acc,
+    neg_remove_num, pos_remove_num,
+    label, res_path,
+    neg_freq_labels=None, pos_freq_labels=None, x_axis=None
+):
+    # Colors
+    neg_color = "#00E013"
+    pos_color = "#EC6A00"
+    text_color = "#012DF1"
 
-#     return pd.DataFrame(rows, columns=columns)
+    plt.figure(figsize=(10, 6))
 
+    # Plot lines
+    plt.plot(neg_remove_num, neg_clean_acc, label='Small weights removed first',
+             marker='o', linestyle='--', linewidth=3., markersize=13, color=pos_color)
+
+    plt.plot(pos_remove_num, pos_clean_acc, label='Large weights removed first',
+             marker='x', linestyle='-', linewidth=3., markersize=13, color=neg_color)
+
+    # Annotate frequencies BELOW points
+    if neg_freq_labels:
+        for i, (x, y, r) in enumerate(zip(neg_remove_num, neg_clean_acc, neg_freq_labels)):
+            if (i % 1 == 0):
+                plt.annotate(r, (x, y), textcoords='offset points',
+                            xytext=(-10, 5), ha='left', fontsize=18, color='#000000')
+
+    flag = 0
+    
+    if pos_freq_labels:
+        for i, (x, y, r) in enumerate(zip(pos_remove_num, pos_clean_acc, pos_freq_labels)):
+            if (i % 5 == 0) or (i == len(pos_remove_num)-1):
+                plt.annotate(r, (x, y), textcoords='offset points',
+                    xytext=(0, 15), ha='center', va='bottom', fontsize=22, color=text_color)
+                
+            # elif (r < 0) and (~flag):
+            #     plt.annotate(r, (x, y), textcoords='offset points',
+            #         xytext=(0, 15), ha='center', fontsize=28, color=pos_color)
+            #     flag = 1
+
+    # Labels and title
+    plt.xlabel('Number of Parameters Removed', fontsize=28, fontweight='semibold')
+    plt.ylabel('Accuracy', fontsize=31, fontweight='semibold')
+    
+    # plt.title('Accuracy vs. Edge Removal Count', fontsize=28, fontweight='semibold')
+    plt.ylim(0.0, 1.0)
+
+    # Set scientific notation on x-axis
+    ax = plt.gca()
+    
+    # Override the x-axis ticks/labels if `x_axis` is given
+    if x_axis is not None:
+        # Compute exponent (e.g., 1e+3, 1e+4) based on the max value
+        exponent = int(np.floor(np.log10(max(x_axis))))
+        scale = 10 ** exponent
+
+        # Scale values and format tick labels as mantissas only
+        scaled_ticks = [x / scale for x in x_axis]
+        mantissa_labels = [f"{v:.1f}" for v in scaled_ticks]
+
+        # Set the ticks and the scaled mantissa labels
+        plt.xticks(ticks=x_axis, labels=mantissa_labels, fontsize=26, fontweight='semibold')
+
+        # Add scientific scale as offset text (e.g., ×1e4) to the end of the x-axis
+        ax.annotate(
+            f"×1e{exponent}",
+            xy=(1.0, 0.0), xycoords='axes fraction',  # Right end of x-axis
+            xytext=(10, -35), textcoords='offset points',  # Just below and slightly to the left
+            ha='right', va='top',
+            fontsize=18, fontweight='semibold'
+        )
+    else:
+        plt.xticks(fontsize=22, fontweight='semibold')
+        ax.ticklabel_format(style='sci', axis='x', scilimits=(0, 0))
+        ax.xaxis.get_offset_text().set_fontsize(24)
+        ax.xaxis.get_offset_text().set_fontweight('semibold')
+
+    # Ticks
+    plt.xticks(fontsize=24, fontweight='semibold')
+    plt.yticks(fontsize=26, fontweight='semibold')
+    
+    # === Axis borders ===
+    for spine in ax.spines.values():
+        spine.set_linewidth(3)
+        spine.set_color('black')
+
+    # Grid and legend
+    plt.grid(True, linestyle='--', linewidth=2.5, color='gray', alpha=0.85)
+    legend = plt.legend(fontsize=24, loc=0)  # create the legend
+    for text in legend.get_texts():
+        text.set_fontweight('semibold')  # or 'bold'
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(res_path, f'{label}_curve_all.png'), dpi=400, bbox_inches="tight")
+    plt.close()

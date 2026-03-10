@@ -21,7 +21,8 @@ if __name__ == '__main__':
                         'resnet18','resnet20','resnet32','resnet34','resnet44','resnet50',
                         'resnet56','resnet101','resnet110','resnet110','resnet152','resnet1202',
                         'wide-resnet18','wide-resnet20','wide-resnet32','wide-resnet34','wide-resnet44','wide-resnet50',
-                        'wide-resnet56','wide-resnet101','wide-resnet110','wide-resnet110','wide-resnet152','wide-resnet1202'],
+                        'wide-resnet56','wide-resnet101','wide-resnet110','wide-resnet110','wide-resnet152','wide-resnet1202', 
+                        'lenet5_relu', 'lenet5_tanh', 'vgg16_relu', 'vgg16_tanh', 'vgg11_relu', 'vgg16_relu_new', 'vgg16_relu_new_small', "vgg16_s2"],
                         help='model architecture (default: fc)')
     training_args.add_argument('--model-class', type=str, default='default', choices=['default','lottery','tinyimagenet','imagenet'],
                         help='model class (default: default)')
@@ -31,7 +32,7 @@ if __name__ == '__main__':
                         help='load pretrained weights (default: False)')
     training_args.add_argument('--optimizer', type=str, default='adam', choices=['sgd','momentum','adam','rms'],
                         help='optimizer (default: adam)')
-    training_args.add_argument('--train-batch-size', type=int, default=64,
+    training_args.add_argument('--train-batch-size', type=int, default=128,
                         help='input batch size for training (default: 64)')
     training_args.add_argument('--test-batch-size', type=int, default=256,
                         help='input batch size for testing (default: 256)')
@@ -39,7 +40,7 @@ if __name__ == '__main__':
                         help='number of epochs to train before pruning (default: 0)')
     training_args.add_argument('--post-epochs', type=int, default=10,
                         help='number of epochs to train after pruning (default: 10)')
-    training_args.add_argument('--lr', type=float, default=0.001,
+    training_args.add_argument('--lr', type=float, default=0.002,
                         help='learning rate (default: 0.001)')
     training_args.add_argument('--lr-drops', type=int, nargs='*', default=[],
                         help='list of learning rate drops (default: [])')
@@ -52,9 +53,9 @@ if __name__ == '__main__':
     pruning_args.add_argument('--pruner', type=str, default='rand', 
                         choices=['rand','mag','snip','grasp','synflow'],
                         help='prune strategy (default: rand)')
-    pruning_args.add_argument('--compression', type=float, default=0.0,
+    pruning_args.add_argument('--compression', type=float, default=1.0,
                         help='quotient of prunable non-zero prunable parameters before and after pruning (default: 1.0)')
-    pruning_args.add_argument('--prune-epochs', type=int, default=1,
+    pruning_args.add_argument('--prune-epochs', type=int, default=100,
                         help='number of iterations for scoring (default: 1)')
     pruning_args.add_argument('--compression-schedule', type=str, default='exponential', choices=['linear','exponential'],
                         help='whether to use a linear or exponential compression schedule (default: exponential)')
@@ -101,7 +102,7 @@ if __name__ == '__main__':
                         help='number of data loading workers (default: 4)')
     parser.add_argument('--no-cuda', action='store_true',
                         help='disables CUDA training')
-    parser.add_argument('--seed', type=int, default=1,
+    parser.add_argument('--seed', type=int, default=13,
                         help='random seed (default: 1)')
     parser.add_argument('--verbose', action='store_true',
                         help='print statistics during training and testing')
@@ -136,7 +137,7 @@ if __name__ == '__main__':
     if args.experiment == 'multishot':
         multishot.run(args)
     if args.experiment == 'unit-conservation':
-    	unit_conservation.run(args)
+        unit_conservation.run(args)
     if args.experiment == 'layer-conservation':
         layer_conservation.run(args)
     if args.experiment == 'imp-conservation':

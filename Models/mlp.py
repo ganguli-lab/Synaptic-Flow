@@ -5,7 +5,7 @@ from Layers import layers
 from torch.nn import functional as F
 
 
-def fc(input_shape, num_classes, dense_classifier=False, pretrained=False, L=6, N=100, nonlinearity=nn.ReLU()):
+def fc(input_shape, num_classes, dense_classifier=False, pretrained=False, L=3, N=100, nonlinearity=nn.ReLU()):
   size = np.prod(input_shape)
   
   # Linear feature extractor

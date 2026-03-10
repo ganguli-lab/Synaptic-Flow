@@ -139,5 +139,7 @@ hyperopt/logs/*.txt
 
 # data
 Data/
+Results/
+Models/models/
 
 # experiments

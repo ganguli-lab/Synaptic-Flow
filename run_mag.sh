@@ -1,0 +1,1 @@
+python main.py --dataset cifar10 --model vgg16_s2 --pretrained True --post-epochs 0 --pruner mag --compression-list 0 0.1 0.2 0.21 0.22 0.23 0.24 0.25 0.26 0.27 0.28 0.29 0.3 0.4 0.45 0.5 0.6 0.7 0.8 0.9 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.5 4 --gpu 1 --prune-epochs 1
